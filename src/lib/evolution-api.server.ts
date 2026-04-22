@@ -1,8 +1,12 @@
-// Evolution API helpers (VERSÃO FINAL - usando backend Node)
+// Evolution API helpers — chamadas server-side direto à Evolution API.
+// Usa configurações salvas em integration_settings (Supabase) com fallback
+// para variáveis de ambiente EVOLUTION_API_URL / EVOLUTION_API_KEY.
+
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export interface EvolutionInstance {
   id?: string;
-  name: string;
+  name?: string;
   instanceName?: string;
   instanceId?: string;
   connectionStatus?: string;
@@ -28,125 +32,211 @@ export interface EvolutionConnectionState {
 }
 
 export interface EvolutionMessage {
-  key: {
-    remoteJid: string;
-    fromMe: boolean;
-    id: string;
-  };
-  message: {
-    conversation?: string;
-    extendedTextMessage?: { text: string };
-  };
+  key: { remoteJid: string; fromMe: boolean; id: string };
+  message: { conversation?: string; extendedTextMessage?: { text: string } };
   messageTimestamp: number;
   pushName?: string;
   status?: string;
 }
 
-const BASE_URL = "http://localhost:3001";
+export interface EvolutionConfig {
+  url: string;
+  apiKey: string;
+  webhookUrl: string;
+  webhookSecret: string;
+}
 
-// ─────────────────────────────
-// 📱 INSTÂNCIAS
-// ─────────────────────────────
+// Carrega config salva no Supabase, com fallback para env vars.
+export async function loadEvolutionConfig(): Promise<EvolutionConfig> {
+  let url = process.env.EVOLUTION_API_URL ?? "";
+  let apiKey = process.env.EVOLUTION_API_KEY ?? "";
+  let webhookUrl = "";
+  let webhookSecret = "";
 
-export async function fetchInstances(): Promise<EvolutionInstance[]> {
-  const res = await fetch(`${BASE_URL}/api/instances`);
-  if (!res.ok) throw new Error("Erro ao buscar instâncias");
+  try {
+    const { data } = await supabaseAdmin
+      .from("integration_settings")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      if (data.evolution_api_url) url = data.evolution_api_url;
+      if (data.evolution_api_key) apiKey = data.evolution_api_key;
+      webhookUrl = data.webhook_url ?? "";
+      webhookSecret = data.webhook_secret ?? "";
+    }
+  } catch (err) {
+    console.error("Failed to load integration settings:", err);
+  }
+
+  // Remove trailing slash
+  url = url.replace(/\/+$/, "");
+  return { url, apiKey, webhookUrl, webhookSecret };
+}
+
+async function evolutionFetch(
+  path: string,
+  init: RequestInit = {},
+  cfgOverride?: EvolutionConfig
+) {
+  const cfg = cfgOverride ?? (await loadEvolutionConfig());
+  if (!cfg.url) {
+    throw new Error(
+      "Evolution API URL não configurada. Vá em Integrações e salve a URL."
+    );
+  }
+  if (!cfg.apiKey) {
+    throw new Error(
+      "Evolution API Key não configurada. Vá em Integrações e salve a chave."
+    );
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: cfg.apiKey,
+    ...((init.headers as Record<string, string>) ?? {}),
+  };
+
+  const res = await fetch(`${cfg.url}${path}`, { ...init, headers });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Evolution API ${res.status}: ${text || res.statusText}`.slice(0, 500)
+    );
+  }
+
+  // Algumas rotas retornam vazio
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return null;
   return res.json();
+}
+
+// ── Test connection ──
+export async function testEvolutionConnection(cfg?: EvolutionConfig) {
+  const data = await evolutionFetch("/instance/fetchInstances", {}, cfg);
+  return { ok: true, data };
+}
+
+// ── Instâncias ──
+export async function fetchInstances(): Promise<EvolutionInstance[]> {
+  const data = await evolutionFetch("/instance/fetchInstances");
+  return Array.isArray(data) ? data : [];
 }
 
 export async function createInstance(instanceName: string, number?: string) {
-  const res = await fetch(`${BASE_URL}/api/instance`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: instanceName, number }),
-  });
-  if (!res.ok) throw new Error("Erro ao criar instância");
-  return res.json();
+  const cfg = await loadEvolutionConfig();
+  const body: Record<string, unknown> = {
+    instanceName,
+    integration: "WHATSAPP-BAILEYS",
+    qrcode: true,
+  };
+  if (number) body.number = number;
+  if (cfg.webhookUrl) {
+    body.webhook = {
+      url: cfg.webhookUrl,
+      events: [
+        "MESSAGES_UPSERT",
+        "MESSAGES_UPDATE",
+        "CONNECTION_UPDATE",
+        "QRCODE_UPDATED",
+      ],
+    };
+  }
+  return evolutionFetch(
+    "/instance/create",
+    { method: "POST", body: JSON.stringify(body) },
+    cfg
+  );
 }
 
 export async function deleteInstance(instanceName: string) {
-  const res = await fetch(`${BASE_URL}/api/instance/${instanceName}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error("Erro ao deletar instância");
-  return res.json();
+  return evolutionFetch(`/instance/delete/${instanceName}`, { method: "DELETE" });
 }
 
-// ─────────────────────────────
-// 🔌 CONEXÃO
-// ─────────────────────────────
-
+// ── Conexão ──
 export async function getConnectionState(
   instanceName: string
 ): Promise<EvolutionConnectionState> {
-  const res = await fetch(`${BASE_URL}/api/status/${instanceName}`);
-  if (!res.ok) throw new Error("Erro ao buscar status");
-  return res.json();
+  const data = await evolutionFetch(`/instance/connectionState/${instanceName}`);
+  // Evolution retorna { instance: { instanceName, state } }
+  const inner = data?.instance ?? data;
+  return {
+    instance: inner?.instanceName ?? instanceName,
+    state: (inner?.state ?? "close") as "open" | "close" | "connecting",
+  };
 }
 
 export async function connectInstance(
   instanceName: string
 ): Promise<EvolutionQrCode> {
-  const res = await fetch(`${BASE_URL}/api/connect/${instanceName}`);
-  if (!res.ok) throw new Error("Erro ao conectar instância");
-  return res.json();
+  const data = await evolutionFetch(`/instance/connect/${instanceName}`);
+  return data ?? {};
 }
 
 export async function reconnectInstance(instanceName: string) {
-  const res = await fetch(`${BASE_URL}/api/connect/${instanceName}`);
-  if (!res.ok) throw new Error("Erro ao reconectar");
-  return res.json();
+  return evolutionFetch(`/instance/restart/${instanceName}`, { method: "POST" });
 }
 
-// ─────────────────────────────
-// 💬 MENSAGENS
-// ─────────────────────────────
-
+// ── Mensagens ──
 export async function sendTextMessage(
   instanceName: string,
   remoteJid: string,
   text: string
 ) {
-  const res = await fetch(`${BASE_URL}/api/send`, {
+  return evolutionFetch(`/message/sendText/${instanceName}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instance: instanceName, number: remoteJid, text }),
+    body: JSON.stringify({ number: remoteJid, text }),
   });
-  if (!res.ok) throw new Error("Erro ao enviar mensagem");
-  return res.json();
 }
 
 export async function fetchMessages(
   instanceName: string,
   remoteJid: string,
-  limit?: number
+  limit = 50
 ): Promise<EvolutionMessage[]> {
-  const url = new URL(`${BASE_URL}/api/messages/${instanceName}`);
-  url.searchParams.set("remoteJid", remoteJid);
-  if (limit) url.searchParams.set("limit", String(limit));
-  const res = await fetch(url.toString());
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await evolutionFetch(
+      `/chat/findMessages/${instanceName}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ where: { key: { remoteJid } }, limit }),
+      }
+    );
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.messages?.records)) return data.messages.records;
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchChats(instanceName: string): Promise<unknown[]> {
-  const res = await fetch(`${BASE_URL}/api/chats/${instanceName}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await evolutionFetch(`/chat/findChats/${instanceName}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 
-// ─────────────────────────────
-// 🔗 WEBHOOK
-// ─────────────────────────────
-
+// ── Webhook ──
 export async function setWebhook(instanceName: string, webhookUrl: string) {
-  const res = await fetch(`${BASE_URL}/api/webhook`, {
+  return evolutionFetch(`/webhook/set/${instanceName}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instance: instanceName, url: webhookUrl }),
+    body: JSON.stringify({
+      enabled: true,
+      url: webhookUrl,
+      events: [
+        "MESSAGES_UPSERT",
+        "MESSAGES_UPDATE",
+        "CONNECTION_UPDATE",
+        "QRCODE_UPDATED",
+      ],
+    }),
   });
-  if (!res.ok) throw new Error("Erro ao configurar webhook");
-  return res.json();
 }

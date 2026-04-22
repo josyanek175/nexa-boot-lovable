@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Plug,
-  Globe,
   Key,
   Webhook,
   Shield,
@@ -12,82 +10,141 @@ import {
   Eye,
   EyeOff,
   Save,
-  ExternalLink,
-  Bot,
-  Bell,
+  Loader2,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  getIntegrationSettings,
+  saveIntegrationSettings,
+  testEvolutionApi,
+} from "@/lib/integration-settings.functions";
 
 export const Route = createFileRoute("/integracoes")({
   component: IntegracoesPage,
   head: () => ({
     meta: [
       { title: "Integrações — NexaBoot" },
-      { name: "description", content: "Configure integrações e API WhatsApp" },
+      { name: "description", content: "Configure a Evolution API e webhooks" },
     ],
   }),
 });
 
-interface IntegrationConfig {
-  apiUrl: string;
-  apiKey: string;
-  webhookUrl: string;
-  webhookSecret: string;
-  provider: string;
+interface FormState {
+  evolution_api_url: string;
+  evolution_api_key: string;
+  webhook_url: string;
+  webhook_secret: string;
 }
 
 function IntegracoesPage() {
-  const [config, setConfig] = useState<IntegrationConfig>({
-    apiUrl: "",
-    apiKey: "",
-    webhookUrl: "",
-    webhookSecret: "",
-    provider: "evolution",
+  const [form, setForm] = useState<FormState>({
+    evolution_api_url: "",
+    evolution_api_key: "",
+    webhook_url: "",
+    webhook_secret: "",
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
-  const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
-    setSaved(true);
-    toast.success("Configurações salvas com sucesso!");
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await getIntegrationSettings();
+        if (result.error) {
+          toast.error(`Erro ao carregar: ${result.error}`);
+        } else if (result.settings) {
+          setForm({
+            evolution_api_url: result.settings.evolution_api_url ?? "",
+            evolution_api_key: result.settings.evolution_api_key ?? "",
+            webhook_url: result.settings.webhook_url ?? "",
+            webhook_secret: result.settings.webhook_secret ?? "",
+          });
+        }
+      } catch {
+        toast.error("Falha ao carregar configurações");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const result = await saveIntegrationSettings({ data: form });
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("Configurações salvas!");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao salvar"
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      // Salva antes de testar (caso usuário tenha mudado)
+      await saveIntegrationSettings({ data: form });
+      const result = await testEvolutionApi();
+      if (result.success) {
+        setTestResult({
+          ok: true,
+          message: `Conexão OK! ${result.instanceCount} instância(s) encontrada(s).`,
+        });
+        toast.success("Conexão estabelecida!");
+      } else {
+        setTestResult({ ok: false, message: result.error ?? "Falha" });
+        toast.error(result.error ?? "Falha na conexão");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro";
+      setTestResult({ ok: false, message: msg });
+      toast.error(msg);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copiado!`);
   };
 
-  const integrations = [
-    {
-      id: "chatbot",
-      name: "Chatbot IA",
-      description: "Conecte um chatbot para respostas automáticas inteligentes",
-      icon: Bot,
-      status: "available" as const,
-    },
-    {
-      id: "notifications",
-      name: "Notificações Push",
-      description: "Receba alertas em tempo real no navegador",
-      icon: Bell,
-      status: "active" as const,
-    },
-    {
-      id: "crm",
-      name: "CRM",
-      description: "Integre com seu CRM para sincronizar contatos",
-      icon: Globe,
-      status: "available" as const,
-    },
-  ];
+  const suggestedWebhook =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/public/webhook`
+      : "";
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Integrações</h1>
-        <p className="text-sm text-muted-foreground">Configure a API do WhatsApp e integrações externas</p>
+        <p className="text-sm text-muted-foreground">
+          Configure a Evolution API e o webhook de recebimento
+        </p>
       </div>
 
       <div className="max-w-3xl space-y-6">
@@ -98,57 +155,89 @@ function IntegracoesPage() {
               <Key className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h2 className="text-base font-bold text-foreground">Evolution API</h2>
-              <p className="text-xs text-muted-foreground">Gerenciamento de instâncias WhatsApp multi-sessão</p>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs font-medium text-primary">Configurado</span>
+              <h2 className="text-base font-bold text-foreground">
+                Evolution API
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Configurações de conexão com seu servidor Evolution
+              </p>
             </div>
           </div>
           <div className="space-y-4 p-5">
-            <div className="flex items-center gap-2 rounded-lg bg-primary/5 p-3">
-              <Shield className="h-4 w-4 text-primary" />
-              <p className="text-xs text-muted-foreground">
-                As credenciais da Evolution API estão configuradas como variáveis de ambiente seguras (EVOLUTION_API_URL e EVOLUTION_API_KEY). Para alterar, acesse as configurações de secrets do projeto.
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                URL da API
+              </label>
+              <input
+                type="text"
+                value={form.evolution_api_url}
+                onChange={(e) =>
+                  setForm({ ...form, evolution_api_url: e.target.value })
+                }
+                placeholder="https://seu-servidor.ngrok.app"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Sem barra final. Ex: https://abc123.ngrok-free.app
               </p>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Provedor ativo</label>
-              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
-                <CheckCircle2 className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">Evolution API (Baileys)</span>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={form.evolution_api_key}
+                  onChange={(e) =>
+                    setForm({ ...form, evolution_api_key: e.target.value })
+                  }
+                  placeholder="Sua API key da Evolution"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">URL da API</label>
-              <input
-                type="text"
-                value={config.apiUrl}
-                onChange={(e) => setConfig({ ...config, apiUrl: e.target.value })}
-                placeholder="https://api.example.com/v1"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">API Key / Token</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={config.apiKey}
-                    onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                    placeholder="Insira sua API key"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleTest}
+                disabled={testing || !form.evolution_api_url || !form.evolution_api_key}
+                className="flex items-center gap-2 rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+              >
+                {testing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                Testar conexão
+              </button>
+              {testResult && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ${
+                    testResult.ok
+                      ? "bg-primary/10 text-primary"
+                      : "bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {testResult.ok ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  )}
+                  {testResult.message}
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -161,95 +250,75 @@ function IntegracoesPage() {
             </div>
             <div>
               <h2 className="text-base font-bold text-foreground">Webhook</h2>
-              <p className="text-xs text-muted-foreground">Endpoint para receber mensagens</p>
-            </div>
-          </div>
-          <div className="space-y-4 p-5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">URL do Webhook</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={config.webhookUrl}
-                  onChange={(e) => setConfig({ ...config, webhookUrl: e.target.value })}
-                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <button
-                  onClick={() => copyToClipboard(config.webhookUrl, "URL")}
-                  className="rounded-lg border border-border px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <Copy className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Webhook Secret</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={showSecret ? "text" : "password"}
-                    value={config.webhookSecret}
-                    onChange={(e) => setConfig({ ...config, webhookSecret: e.target.value })}
-                    placeholder="Secret para validação"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  <button
-                    onClick={() => setShowSecret(!showSecret)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 rounded-lg bg-primary/5 p-3">
-              <Shield className="h-4 w-4 text-primary" />
               <p className="text-xs text-muted-foreground">
-                Configure este URL no painel do provedor WhatsApp para receber mensagens em tempo real.
+                URL que receberá os eventos da Evolution API
               </p>
             </div>
           </div>
-        </div>
-
-        {/* Other Integrations */}
-        <div className="rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex items-center gap-3 border-b border-border p-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Plug className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-foreground">Outras Integrações</h2>
-              <p className="text-xs text-muted-foreground">Conecte serviços externos</p>
-            </div>
-          </div>
-          <div className="divide-y divide-border">
-            {integrations.map((integration) => (
-              <div key={integration.id} className="flex items-center justify-between p-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
-                    <integration.icon className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">{integration.name}</h3>
-                    <p className="text-xs text-muted-foreground">{integration.description}</p>
-                  </div>
-                </div>
-                {integration.status === "active" ? (
-                  <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-xs font-medium text-primary">Ativo</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => toast.info(`Integração "${integration.name}" será disponibilizada em breve`)}
-                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Conectar
-                  </button>
-                )}
+          <div className="space-y-4 p-5">
+            <div className="rounded-lg bg-primary/5 p-3">
+              <p className="text-xs text-muted-foreground">
+                <Shield className="mr-1 inline h-3.5 w-3.5 text-primary" />
+                URL pública sugerida deste app:
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs">
+                  {suggestedWebhook}
+                </code>
+                <button
+                  onClick={() => {
+                    copy(suggestedWebhook, "URL");
+                    setForm({ ...form, webhook_url: suggestedWebhook });
+                  }}
+                  className="rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
               </div>
-            ))}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                URL do Webhook
+              </label>
+              <input
+                type="text"
+                value={form.webhook_url}
+                onChange={(e) =>
+                  setForm({ ...form, webhook_url: e.target.value })
+                }
+                placeholder="https://seu-app.lovable.app/api/public/webhook"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                Webhook Secret (opcional)
+              </label>
+              <div className="relative">
+                <input
+                  type={showSecret ? "text" : "password"}
+                  value={form.webhook_secret}
+                  onChange={(e) =>
+                    setForm({ ...form, webhook_secret: e.target.value })
+                  }
+                  placeholder="Chave para validação de origem"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(!showSecret)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showSecret ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -257,10 +326,15 @@ function IntegracoesPage() {
         <div className="flex justify-end">
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-            {saved ? "Salvo!" : "Salvar configurações"}
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Salvar configurações
           </button>
         </div>
       </div>
