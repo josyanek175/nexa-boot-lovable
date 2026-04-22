@@ -95,6 +95,36 @@ export type Database = {
           },
         ]
       }
+      integration_settings: {
+        Row: {
+          evolution_api_key: string
+          evolution_api_url: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          webhook_secret: string
+          webhook_url: string
+        }
+        Insert: {
+          evolution_api_key?: string
+          evolution_api_url?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          webhook_secret?: string
+          webhook_url?: string
+        }
+        Update: {
+          evolution_api_key?: string
+          evolution_api_url?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          webhook_secret?: string
+          webhook_url?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           conteudo: string
