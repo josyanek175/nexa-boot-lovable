@@ -19,6 +19,7 @@ import {
   saveIntegrationSettings,
   testEvolutionApi,
 } from "@/lib/integration-settings.functions";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/integracoes")({
   component: IntegracoesPage,
@@ -37,32 +38,12 @@ interface FormState {
   webhook_secret: string;
 }
 
-function getAuthHeaders() {
-  if (typeof window === "undefined") return {};
-
-  const storageKey = Object.keys(window.localStorage).find((key) =>
-    key.startsWith("sb-") && key.endsWith("-auth-token")
-  );
-
-  if (!storageKey) return {};
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return {};
-
-    const parsed = JSON.parse(raw) as {
-      access_token?: string;
-      currentSession?: { access_token?: string };
-    };
-
-    const token = parsed.access_token ?? parsed.currentSession?.access_token;
-    return token ? { "x-supabase-access-token": token } : {};
-  } catch {
-    return {};
-  }
+function getAuthHeaders(accessToken?: string): Record<string, string> | undefined {
+  return accessToken ? { "x-supabase-access-token": accessToken } : undefined;
 }
 
 function IntegracoesPage() {
+  const { session } = useAuth();
   const [form, setForm] = useState<FormState>({
     evolution_api_url: "",
     evolution_api_key: "",
@@ -80,9 +61,15 @@ function IntegracoesPage() {
   const [showSecret, setShowSecret] = useState(false);
 
   useEffect(() => {
+    const headers = getAuthHeaders(session?.access_token);
+    if (!headers) {
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       try {
-        const result = await getIntegrationSettings({ headers: getAuthHeaders() });
+        const result = await getIntegrationSettings({ headers });
         if (result.error) {
           toast.error(`Erro ao carregar: ${result.error}`);
         } else if (result.settings) {
@@ -99,14 +86,15 @@ function IntegracoesPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [session?.access_token]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const headers = getAuthHeaders(session?.access_token);
       const result = await saveIntegrationSettings({
         data: form,
-        headers: getAuthHeaders(),
+        ...(headers ? { headers } : {}),
       });
       if (result.error) {
         toast.error(result.error);
@@ -127,9 +115,12 @@ function IntegracoesPage() {
     setTestResult(null);
     try {
       // Salva antes de testar (caso usuário tenha mudado)
-      const headers = getAuthHeaders();
-      await saveIntegrationSettings({ data: form, headers });
-      const result = await testEvolutionApi({ headers });
+      const headers = getAuthHeaders(session?.access_token);
+      await saveIntegrationSettings({
+        data: form,
+        ...(headers ? { headers } : {}),
+      });
+      const result = await testEvolutionApi(headers ? { headers } : undefined);
       if (result.success) {
         setTestResult({
           ok: true,
