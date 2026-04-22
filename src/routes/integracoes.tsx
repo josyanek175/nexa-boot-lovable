@@ -37,6 +37,31 @@ interface FormState {
   webhook_secret: string;
 }
 
+function getAuthHeaders() {
+  if (typeof window === "undefined") return {};
+
+  const storageKey = Object.keys(window.localStorage).find((key) =>
+    key.startsWith("sb-") && key.endsWith("-auth-token")
+  );
+
+  if (!storageKey) return {};
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as {
+      access_token?: string;
+      currentSession?: { access_token?: string };
+    };
+
+    const token = parsed.access_token ?? parsed.currentSession?.access_token;
+    return token ? { "x-supabase-access-token": token } : {};
+  } catch {
+    return {};
+  }
+}
+
 function IntegracoesPage() {
   const [form, setForm] = useState<FormState>({
     evolution_api_url: "",
@@ -57,7 +82,7 @@ function IntegracoesPage() {
   useEffect(() => {
     (async () => {
       try {
-        const result = await getIntegrationSettings();
+        const result = await getIntegrationSettings({ headers: getAuthHeaders() });
         if (result.error) {
           toast.error(`Erro ao carregar: ${result.error}`);
         } else if (result.settings) {
@@ -79,7 +104,10 @@ function IntegracoesPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await saveIntegrationSettings({ data: form });
+      const result = await saveIntegrationSettings({
+        data: form,
+        headers: getAuthHeaders(),
+      });
       if (result.error) {
         toast.error(result.error);
       } else {
@@ -99,8 +127,9 @@ function IntegracoesPage() {
     setTestResult(null);
     try {
       // Salva antes de testar (caso usuário tenha mudado)
-      await saveIntegrationSettings({ data: form });
-      const result = await testEvolutionApi();
+      const headers = getAuthHeaders();
+      await saveIntegrationSettings({ data: form, headers });
+      const result = await testEvolutionApi({ headers });
       if (result.success) {
         setTestResult({
           ok: true,
