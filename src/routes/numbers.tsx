@@ -338,7 +338,6 @@ function NumbersPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await listInstances();
       const headers = getAuthHeaders(session?.access_token);
       const result = await listInstances(headers ? { headers } : undefined);
       if (result.error) {
