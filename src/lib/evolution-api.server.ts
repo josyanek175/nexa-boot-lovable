@@ -98,10 +98,33 @@ async function evolutionFetch(
     ...((init.headers as Record<string, string>) ?? {}),
   };
 
-  const res = await fetch(`${cfg.url}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.url}${path}`, {
+      ...init,
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("timeout") || msg.includes("aborted")) {
+      throw new Error("Servidor indisponível (timeout). Verifique a URL.");
+    }
+    throw new Error(
+      `Falha de rede ao conectar em ${cfg.url}. Verifique se a URL está acessível publicamente. (${msg})`
+    );
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("API Key inválida (401). Verifique a chave Evolution.");
+    }
+    if (res.status === 404) {
+      throw new Error(
+        `Endpoint não encontrado (404). Verifique se a URL ${cfg.url} é uma Evolution API válida.`
+      );
+    }
     throw new Error(
       `Evolution API ${res.status}: ${text || res.statusText}`.slice(0, 500)
     );
