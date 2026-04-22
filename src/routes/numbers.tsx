@@ -329,17 +329,18 @@ function NumbersPage() {
       // Fetch connection state for each instance
       const enriched: InstanceInfo[] = await Promise.all(
         result.instances.map(async (inst) => {
+          const instName = inst.name ?? inst.instanceName ?? "";
           const base: InstanceInfo = {
-            instanceName: inst.name,
-            instanceId: inst.instanceId,
-            status: inst.status ?? "unknown",
+            instanceName: instName,
+            instanceId: inst.instanceId ?? inst.id,
+            status: inst.status ?? inst.connectionStatus ?? "unknown",
             number: inst.number,
             profileName: inst.profileName,
-            profilePictureUrl: inst.profilePictureUrl,
+            profilePictureUrl: inst.profilePictureUrl ?? inst.profilePicUrl,
           };
           try {
             const stateResult = await getInstanceState({
-              data: { instanceName: inst.name },
+              data: { instanceName: instName },
             });
             return { ...base, connectionState: stateResult.state };
           } catch {
