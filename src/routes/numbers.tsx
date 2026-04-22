@@ -26,6 +26,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
+
+function getAuthHeaders(accessToken?: string): Record<string, string> | undefined {
+  return accessToken ? { "x-supabase-access-token": accessToken } : undefined;
+}
 
 export const Route = createFileRoute("/numbers")({
   component: NumbersPage,
@@ -52,10 +57,12 @@ function CreateInstanceModal({
   open,
   onClose,
   onCreated,
+  accessToken,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  accessToken?: string;
 }) {
   const [name, setName] = useState("");
   const [number, setNumber] = useState("");
@@ -79,6 +86,9 @@ function CreateInstanceModal({
           instanceName: name.trim().toLowerCase().replace(/\s+/g, "-"),
           number: number.trim() || undefined,
         },
+        ...(getAuthHeaders(accessToken)
+          ? { headers: getAuthHeaders(accessToken) }
+          : {}),
       });
 
       if (result.error) {
@@ -195,10 +205,12 @@ function QrCodeModal({
   open,
   onClose,
   instanceName,
+  accessToken,
 }: {
   open: boolean;
   onClose: () => void;
   instanceName: string;
+  accessToken?: string;
 }) {
   const [loading, setLoading] = useState(true);
   const [qrBase64, setQrBase64] = useState<string | null>(null);
@@ -209,7 +221,12 @@ function QrCodeModal({
     if (!open) return;
     setLoading(true);
     setError(null);
-    connectToInstance({ data: { instanceName } })
+    connectToInstance({
+      data: { instanceName },
+      ...(getAuthHeaders(accessToken)
+        ? { headers: getAuthHeaders(accessToken) }
+        : {}),
+    })
       .then((res) => {
         if (res.error) {
           setError(res.error);
@@ -222,7 +239,7 @@ function QrCodeModal({
       })
       .catch(() => setError("Erro ao obter QR Code"))
       .finally(() => setLoading(false));
-  }, [open, instanceName]);
+  }, [open, instanceName, accessToken]);
 
   if (!open) return null;
 
@@ -307,6 +324,7 @@ function DeleteConfirmModal({
 
 // ── Main Page ──
 function NumbersPage() {
+  const { session } = useAuth();
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -320,7 +338,8 @@ function NumbersPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await listInstances();
+      const headers = getAuthHeaders(session?.access_token);
+      const result = await listInstances(headers ? { headers } : undefined);
       if (result.error) {
         setError(result.error);
         return;
@@ -341,6 +360,7 @@ function NumbersPage() {
           try {
             const stateResult = await getInstanceState({
               data: { instanceName: instName },
+              ...(headers ? { headers } : {}),
             });
             return { ...base, connectionState: stateResult.state };
           } catch {
@@ -355,7 +375,7 @@ function NumbersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session?.access_token]);
 
   useEffect(() => {
     loadInstances();
@@ -364,7 +384,11 @@ function NumbersPage() {
   const handleDelete = async () => {
     if (!deletingInstance) return;
     setDeleteLoading(true);
-    const result = await removeInstance({ data: { instanceName: deletingInstance } });
+    const headers = getAuthHeaders(session?.access_token);
+    const result = await removeInstance({
+      data: { instanceName: deletingInstance },
+      ...(headers ? { headers } : {}),
+    });
     setDeleteLoading(false);
 
     if (result.error) {
@@ -378,7 +402,11 @@ function NumbersPage() {
 
   const handleDisconnect = async (instanceName: string) => {
     setActionLoading((prev) => ({ ...prev, [instanceName]: true }));
-    const result = await disconnectInstance({ data: { instanceName } });
+    const headers = getAuthHeaders(session?.access_token);
+    const result = await disconnectInstance({
+      data: { instanceName },
+      ...(headers ? { headers } : {}),
+    });
     setActionLoading((prev) => ({ ...prev, [instanceName]: false }));
 
     if (result.error) {
@@ -391,7 +419,11 @@ function NumbersPage() {
 
   const handleRestart = async (instanceName: string) => {
     setActionLoading((prev) => ({ ...prev, [instanceName]: true }));
-    const result = await restartEvolutionInstance({ data: { instanceName } });
+    const headers = getAuthHeaders(session?.access_token);
+    const result = await restartEvolutionInstance({
+      data: { instanceName },
+      ...(headers ? { headers } : {}),
+    });
     setActionLoading((prev) => ({ ...prev, [instanceName]: false }));
 
     if (result.error) {
@@ -585,6 +617,7 @@ function NumbersPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={loadInstances}
+        accessToken={session?.access_token}
       />
       {deletingInstance && (
         <DeleteConfirmModal
@@ -600,6 +633,7 @@ function NumbersPage() {
           open={!!qrInstance}
           onClose={() => { setQrInstance(null); loadInstances(); }}
           instanceName={qrInstance}
+          accessToken={session?.access_token}
         />
       )}
     </div>

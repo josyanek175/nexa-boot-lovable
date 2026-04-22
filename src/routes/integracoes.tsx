@@ -19,6 +19,7 @@ import {
   saveIntegrationSettings,
   testEvolutionApi,
 } from "@/lib/integration-settings.functions";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/integracoes")({
   component: IntegracoesPage,
@@ -37,7 +38,12 @@ interface FormState {
   webhook_secret: string;
 }
 
+function getAuthHeaders(accessToken?: string): Record<string, string> | undefined {
+  return accessToken ? { "x-supabase-access-token": accessToken } : undefined;
+}
+
 function IntegracoesPage() {
+  const { session } = useAuth();
   const [form, setForm] = useState<FormState>({
     evolution_api_url: "",
     evolution_api_key: "",
@@ -55,9 +61,15 @@ function IntegracoesPage() {
   const [showSecret, setShowSecret] = useState(false);
 
   useEffect(() => {
+    const headers = getAuthHeaders(session?.access_token);
+    if (!headers) {
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       try {
-        const result = await getIntegrationSettings();
+        const result = await getIntegrationSettings({ headers });
         if (result.error) {
           toast.error(`Erro ao carregar: ${result.error}`);
         } else if (result.settings) {
@@ -74,12 +86,16 @@ function IntegracoesPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [session?.access_token]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await saveIntegrationSettings({ data: form });
+      const headers = getAuthHeaders(session?.access_token);
+      const result = await saveIntegrationSettings({
+        data: form,
+        ...(headers ? { headers } : {}),
+      });
       if (result.error) {
         toast.error(result.error);
       } else {
@@ -99,8 +115,12 @@ function IntegracoesPage() {
     setTestResult(null);
     try {
       // Salva antes de testar (caso usuário tenha mudado)
-      await saveIntegrationSettings({ data: form });
-      const result = await testEvolutionApi();
+      const headers = getAuthHeaders(session?.access_token);
+      await saveIntegrationSettings({
+        data: form,
+        ...(headers ? { headers } : {}),
+      });
+      const result = await testEvolutionApi(headers ? { headers } : undefined);
       if (result.success) {
         setTestResult({
           ok: true,
