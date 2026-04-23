@@ -4,11 +4,9 @@ import { createFileRoute } from "@tanstack/react-router";
 // Útil para chamadas manuais/debug. O sistema usa server functions internamente.
 
 const EVOLUTION_BASE_URL =
-  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") ||
-  "http://72.61.133.41:8080";
+  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") || "";
 
-const EVOLUTION_API_KEY =
-  process.env.EVOLUTION_API_KEY || "429683C4C977415CAAFFCE10F7D57E11";
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || "";
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
