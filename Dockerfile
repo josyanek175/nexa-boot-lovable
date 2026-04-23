@@ -6,16 +6,15 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-
 RUN npm run build
 
 FROM nginx:alpine
 
-# remove página padrão
+# remove default nginx page
 RUN rm -rf /usr/share/nginx/html/*
 
-# copia build
-COPY --from=builder /app/dist /usr/share/nginx/html
+# copia SOMENTE o frontend gerado
+COPY --from=builder /app/dist/client /usr/share/nginx/html
 
 EXPOSE 80
 
