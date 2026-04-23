@@ -55,26 +55,47 @@ export type Database = {
       }
       conversations: {
         Row: {
+          assigned_at: string | null
+          assigned_to: string | null
+          closed_at: string | null
+          closed_by: string | null
           contact_id: string
           created_at: string
+          first_response_at: string | null
           id: string
+          last_customer_message_at: string | null
           status: Database["public"]["Enums"]["conversation_status"]
+          status_atendimento: Database["public"]["Enums"]["attendance_status"]
           updated_at: string
           whatsapp_number_id: string
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_id: string
           created_at?: string
+          first_response_at?: string | null
           id?: string
+          last_customer_message_at?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
+          status_atendimento?: Database["public"]["Enums"]["attendance_status"]
           updated_at?: string
           whatsapp_number_id: string
         }
         Update: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_id?: string
           created_at?: string
+          first_response_at?: string | null
           id?: string
+          last_customer_message_at?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
+          status_atendimento?: Database["public"]["Enums"]["attendance_status"]
           updated_at?: string
           whatsapp_number_id?: string
         }
@@ -217,6 +238,7 @@ export type Database = {
           pode_gerenciar_integracoes: boolean
           pode_gerenciar_numeros: boolean
           pode_gerenciar_usuarios: boolean
+          pode_reatribuir_conversas: boolean
           pode_ver_automacoes: boolean
           pode_ver_contatos: boolean
           pode_ver_dashboard: boolean
@@ -235,6 +257,7 @@ export type Database = {
           pode_gerenciar_integracoes?: boolean
           pode_gerenciar_numeros?: boolean
           pode_gerenciar_usuarios?: boolean
+          pode_reatribuir_conversas?: boolean
           pode_ver_automacoes?: boolean
           pode_ver_contatos?: boolean
           pode_ver_dashboard?: boolean
@@ -253,6 +276,7 @@ export type Database = {
           pode_gerenciar_integracoes?: boolean
           pode_gerenciar_numeros?: boolean
           pode_gerenciar_usuarios?: boolean
+          pode_reatribuir_conversas?: boolean
           pode_ver_automacoes?: boolean
           pode_ver_contatos?: boolean
           pode_ver_dashboard?: boolean
@@ -325,6 +349,7 @@ export type Database = {
           instance_name: string
           nome: string
           phone_number: string | null
+          sla_minutes: number
           status: Database["public"]["Enums"]["whatsapp_status"]
           updated_at: string
         }
@@ -334,6 +359,7 @@ export type Database = {
           instance_name: string
           nome: string
           phone_number?: string | null
+          sla_minutes?: number
           status?: Database["public"]["Enums"]["whatsapp_status"]
           updated_at?: string
         }
@@ -343,6 +369,7 @@ export type Database = {
           instance_name?: string
           nome?: string
           phone_number?: string | null
+          sla_minutes?: number
           status?: Database["public"]["Enums"]["whatsapp_status"]
           updated_at?: string
         }
@@ -353,6 +380,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_reassign_conversations: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
@@ -365,6 +396,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "atendente"
+      attendance_status: "pendente" | "em_atendimento" | "finalizado"
       conversation_status: "aberto" | "fechado"
       message_type: "entrada" | "saida"
       user_status: "ativo" | "inativo"
@@ -497,6 +529,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "atendente"],
+      attendance_status: ["pendente", "em_atendimento", "finalizado"],
       conversation_status: ["aberto", "fechado"],
       message_type: ["entrada", "saida"],
       user_status: ["ativo", "inativo"],

@@ -1,9 +1,15 @@
-import { Search, X } from "lucide-react";
+import { Search, X, Clock, AlertTriangle, UserCheck, Inbox, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 
 interface ConversationItem {
   id: string;
   status: string;
+  status_atendimento?: "pendente" | "em_atendimento" | "finalizado";
+  assigned_to?: string | null;
+  assigned_profile?: { nome: string } | null;
+  last_customer_message_at?: string | null;
+  first_response_at?: string | null;
+  sla_minutes?: number;
   updated_at: string;
   whatsapp_number_id: string;
   contacts: {
@@ -20,22 +26,7 @@ interface ConversationListProps {
   conversations: ConversationItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    aberto: "bg-status-open/15 text-status-open",
-    fechado: "bg-status-closed/15 text-status-closed",
-  };
-  const labels: Record<string, string> = {
-    aberto: "Aberto",
-    fechado: "Fechado",
-  };
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${styles[status] || "bg-muted text-muted-foreground"}`}>
-      {labels[status] || status}
-    </span>
-  );
+  currentUserId?: string;
 }
 
 function timeAgo(dateStr: string) {
@@ -46,16 +37,42 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(diff / 1440)}d`;
 }
 
-export function ConversationList({ conversations, selectedId, onSelect }: ConversationListProps) {
+function isOverdue(conv: ConversationItem): boolean {
+  if (conv.status_atendimento === "finalizado") return false;
+  if (!conv.last_customer_message_at) return false;
+  const sla = conv.sla_minutes ?? 5;
+  // Atrasada se cliente mandou e: não houve resposta OU resposta veio antes da última msg do cliente
+  const lastCustomer = new Date(conv.last_customer_message_at).getTime();
+  const lastResponse = conv.first_response_at ? new Date(conv.first_response_at).getTime() : 0;
+  if (lastResponse > lastCustomer) return false;
+  return Date.now() - lastCustomer > sla * 60_000;
+}
+
+const STATUS_TABS = [
+  { value: "all", label: "Todas", icon: Inbox },
+  { value: "pendente", label: "Fila", icon: Clock },
+  { value: "em_atendimento", label: "Em atendimento", icon: UserCheck },
+  { value: "finalizado", label: "Finalizadas", icon: CheckCircle2 },
+] as const;
+
+export function ConversationList({ conversations, selectedId, onSelect, currentUserId }: ConversationListProps) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [tab, setTab] = useState<string>("all");
+
+  const counts = {
+    all: conversations.length,
+    pendente: conversations.filter((c) => c.status_atendimento === "pendente").length,
+    em_atendimento: conversations.filter((c) => c.status_atendimento === "em_atendimento").length,
+    finalizado: conversations.filter((c) => c.status_atendimento === "finalizado").length,
+  };
 
   const filtered = conversations.filter((c) => {
     const name = c.contacts?.nome ?? "";
     const phone = c.contacts?.telefone ?? "";
-    const matchSearch = name.toLowerCase().includes(search.toLowerCase()) || phone.includes(search);
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchSearch =
+      name.toLowerCase().includes(search.toLowerCase()) || phone.includes(search);
+    const matchTab = tab === "all" || c.status_atendimento === tab;
+    return matchSearch && matchTab;
   });
 
   return (
@@ -79,29 +96,30 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
             </button>
           )}
         </div>
-        {search && (
-          <p className="mt-2 px-1 text-[11px] text-muted-foreground">
-            {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} para "{search}"
-          </p>
-        )}
-        <div className="mt-3 flex gap-1">
-          {[
-            { value: "all", label: "Todos" },
-            { value: "aberto", label: "Abertos" },
-            { value: "fechado", label: "Fechados" },
-          ].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === f.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+
+        <div className="mt-3 flex gap-1 overflow-x-auto custom-scrollbar">
+          {STATUS_TABS.map((t) => {
+            const Icon = t.icon;
+            const count = counts[t.value as keyof typeof counts];
+            const active = tab === t.value;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setTab(t.value)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                <Icon className="h-3 w-3" />
+                {t.label}
+                <span className={`rounded-full px-1.5 text-[10px] ${active ? "bg-primary-foreground/20" : "bg-background"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -113,7 +131,16 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
         ) : (
           filtered.map((conv) => {
             const contactName = conv.contacts?.nome ?? "Desconhecido";
-            const initials = contactName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+            const initials = contactName
+              .split(" ")
+              .map((n) => n[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase();
+            const overdue = isOverdue(conv);
+            const isMine = currentUserId && conv.assigned_to === currentUserId;
+            const assigneeName = conv.assigned_profile?.nome;
+
             return (
               <button
                 key={conv.id}
@@ -122,23 +149,58 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
                   selectedId === conv.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
                 }`}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                  {initials}
+                <div className="relative">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                    {initials}
+                  </div>
+                  {overdue && (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-foreground truncate">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground">
                       {contactName}
                     </span>
-                    <span className="text-[10px] text-muted-foreground shrink-0 ml-2">
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
                       {timeAgo(conv.lastMessageTime)}
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {conv.lastMessage || "Sem mensagens"}
                   </p>
-                  <div className="mt-1.5">
-                    <StatusBadge status={conv.status} />
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    {conv.status_atendimento === "pendente" && (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                        Na fila
+                      </span>
+                    )}
+                    {conv.status_atendimento === "em_atendimento" && (
+                      <span className="rounded-full bg-status-open/15 px-2 py-0.5 text-[10px] font-medium text-status-open">
+                        Em atendimento
+                      </span>
+                    )}
+                    {conv.status_atendimento === "finalizado" && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        Finalizada
+                      </span>
+                    )}
+                    {assigneeName && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          isMine ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isMine ? "Você" : assigneeName.split(" ")[0]}
+                      </span>
+                    )}
+                    {overdue && (
+                      <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                        Atrasada
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>

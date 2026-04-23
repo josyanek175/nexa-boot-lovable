@@ -5,6 +5,7 @@ import { ChatView } from "@/components/ChatView";
 import { EmptyChatState } from "@/components/EmptyChatState";
 import { NumberSelector } from "@/components/NumberSelector";
 import { useActiveNumber } from "@/hooks/use-active-number";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
@@ -24,7 +25,8 @@ function ConversationsPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const { activeNumberId } = useActiveNumber();
+  const { activeNumberId, numbers } = useActiveNumber();
+  const { user } = useAuth();
 
   const fetchConversations = useCallback(async () => {
     setLoadingConvs(true);
@@ -39,10 +41,30 @@ function ConversationsPage() {
 
     const { data: convs } = await query;
 
-    if (convs) {
-      // Fetch last message for each conversation
+    if (convs && convs.length > 0) {
+      // Fetch assignee profiles in batch
+      const assigneeIds = Array.from(
+        new Set(convs.map((c: any) => c.assigned_to).filter(Boolean))
+      );
+      let profilesMap: Record<string, { nome: string }> = {};
+      if (assigneeIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, nome")
+          .in("user_id", assigneeIds as string[]);
+        (profs ?? []).forEach((p: any) => {
+          profilesMap[p.user_id] = { nome: p.nome };
+        });
+      }
+
+      // SLA per number lookup
+      const slaMap: Record<string, number> = {};
+      numbers.forEach((n: any) => {
+        slaMap[n.id] = n.sla_minutes ?? 5;
+      });
+
       const enriched = await Promise.all(
-        convs.map(async (conv) => {
+        convs.map(async (conv: any) => {
           const { data: msgs } = await supabase
             .from("messages")
             .select("conteudo, data_envio")
@@ -54,13 +76,17 @@ function ConversationsPage() {
             ...conv,
             lastMessage: lastMsg?.conteudo ?? "",
             lastMessageTime: lastMsg?.data_envio ?? conv.updated_at,
+            assigned_profile: conv.assigned_to ? profilesMap[conv.assigned_to] ?? null : null,
+            sla_minutes: slaMap[conv.whatsapp_number_id] ?? 5,
           };
         })
       );
       setConversations(enriched);
+    } else {
+      setConversations([]);
     }
     setLoadingConvs(false);
-  }, [activeNumberId]);
+  }, [activeNumberId, numbers]);
 
   const fetchMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
@@ -85,20 +111,25 @@ function ConversationsPage() {
     }
   }, [selectedId, fetchMessages]);
 
-  // Realtime subscription for new messages
+  // Realtime: messages + conversations
   useEffect(() => {
     const channel = supabase
-      .channel("messages-realtime")
+      .channel("chat-realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const newMsg = payload.new as any;
-          // If the new message belongs to the selected conversation, add it
           if (selectedId && newMsg.conversation_id === selectedId) {
             fetchMessages(selectedId);
           }
-          // Refresh conversation list
+          fetchConversations();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "conversations" },
+        () => {
           fetchConversations();
         }
       )
@@ -122,11 +153,9 @@ function ConversationsPage() {
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2.5">
         <NumberSelector />
-        {activeNumberId !== "all" && (
-          <span className="text-xs text-muted-foreground">
-            {conversations.length} conversa{conversations.length !== 1 ? "s" : ""}
-          </span>
-        )}
+        <span className="text-xs text-muted-foreground">
+          {conversations.length} conversa{conversations.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -139,6 +168,7 @@ function ConversationsPage() {
             conversations={conversations}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            currentUserId={user?.id}
           />
         )}
         {selectedConv && selectedId ? (
@@ -151,6 +181,7 @@ function ConversationsPage() {
               conversation={selectedConv}
               messages={messages}
               onMessageSent={handleMessageSent}
+              onConversationUpdate={fetchConversations}
             />
           )
         ) : (
