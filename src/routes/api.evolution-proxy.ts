@@ -16,6 +16,13 @@ const CORS: Record<string, string> = {
 };
 
 async function forward(request: Request) {
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "evolution_proxy_misconfigured", message: "EVOLUTION_API_URL or EVOLUTION_API_KEY missing in server env" }),
+      { status: 500, headers: { "Content-Type": "application/json", ...CORS } }
+    );
+  }
+
   const incoming = new URL(request.url);
   const rawPath = incoming.searchParams.get("path") ?? "";
   const cleanPath = rawPath.replace(/^\/+/, "");
