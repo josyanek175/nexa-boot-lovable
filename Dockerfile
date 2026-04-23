@@ -12,11 +12,7 @@ FROM nginx:alpine
 
 RUN rm -rf /usr/share/nginx/html/*
 
-# tenta copiar dist normal
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# fallback se existir client
-COPY --from=builder /app/dist/client /usr/share/nginx/html
 
 EXPOSE 80
 
