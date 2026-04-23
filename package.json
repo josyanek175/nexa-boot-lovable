@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "start": "PORT=3000 node dist/server/index.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "serve": "^14.2.0",
