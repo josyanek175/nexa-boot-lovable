@@ -221,6 +221,15 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
           })
         )}
       </div>
+
+      <NewConversationDialog
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreated={(id) => {
+          onConversationCreated?.(id);
+          onSelect(id);
+        }}
+      />
     </div>
   );
 }

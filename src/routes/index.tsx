@@ -169,6 +169,7 @@ function ConversationsPage() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             currentUserId={user?.id}
+            onConversationCreated={() => fetchConversations()}
           />
         )}
         {selectedConv && selectedId ? (
