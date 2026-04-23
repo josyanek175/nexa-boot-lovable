@@ -1,4 +1,4 @@
-import { Search, Filter } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useState } from "react";
 
 interface ConversationItem {
@@ -60,21 +60,30 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
 
   return (
     <div className="flex h-full w-80 flex-col border-r border-border bg-card lg:w-96">
-      <div className="border-b border-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar conversa..."
-              className="w-full rounded-lg bg-muted py-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <button className="rounded-lg p-2 text-muted-foreground hover:bg-muted">
-            <Filter className="h-4 w-4" />
-          </button>
+      <div className="border-b border-border p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou telefone..."
+            className="w-full rounded-full bg-muted py-2 pl-9 pr-9 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+              aria-label="Limpar busca"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
+        {search && (
+          <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+            {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} para "{search}"
+          </p>
+        )}
         <div className="mt-3 flex gap-1">
           {[
             { value: "all", label: "Todos" },

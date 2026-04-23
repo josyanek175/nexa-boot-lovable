@@ -60,22 +60,23 @@ function MessageBubble({ message }: { message: MessageItem }) {
   const agentName = message.profiles?.nome;
 
   return (
-    <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-2`}>
+    <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1.5`}>
       <div
-        className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+        className={`relative max-w-[75%] rounded-lg px-3 py-1.5 text-sm shadow-sm ${
           isSent
-            ? "rounded-br-md bg-chat-bubble-sent text-foreground"
-            : "rounded-bl-md bg-chat-bubble-received text-foreground"
+            ? "rounded-tr-sm bg-chat-bubble-sent text-foreground"
+            : "rounded-tl-sm bg-chat-bubble-received text-foreground"
         }`}
       >
         {isSent && agentName && (
-          <p className="mb-1 text-[10px] font-semibold text-primary">{agentName}</p>
+          <p className="mb-0.5 text-[11px] font-semibold text-primary">{agentName}</p>
         )}
-        <p>{message.conteudo}</p>
-        <div className={`mt-1 flex items-center gap-1 ${isSent ? "justify-end" : "justify-start"}`}>
+        <p className="whitespace-pre-wrap break-words pr-12">{message.conteudo}</p>
+        <div className="float-right -mb-1 ml-2 mt-1 flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground">{time}</span>
           {isSent && <CheckCheck className="h-3 w-3 text-primary" />}
         </div>
+        <div className="clear-both" />
       </div>
     </div>
   );
@@ -158,11 +159,33 @@ export function ChatView({ conversation, messages, onMessageSent }: ChatViewProp
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-pattern custom-scrollbar px-4 py-4">
         {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Nenhuma mensagem ainda. Envie a primeira!
+          <div className="flex h-full items-center justify-center">
+            <div className="rounded-lg bg-card/80 px-4 py-2 text-xs text-muted-foreground shadow-sm">
+              Nenhuma mensagem ainda. Envie a primeira!
+            </div>
           </div>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          (() => {
+            let lastDate = "";
+            return messages.map((msg) => {
+              const d = new Date(msg.data_envio);
+              const dateLabel = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+              const showDivider = dateLabel !== lastDate;
+              lastDate = dateLabel;
+              return (
+                <div key={msg.id}>
+                  {showDivider && (
+                    <div className="my-3 flex justify-center">
+                      <span className="rounded-md bg-card/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                        {dateLabel}
+                      </span>
+                    </div>
+                  )}
+                  <MessageBubble message={msg} />
+                </div>
+              );
+            });
+          })()
         )}
         <div ref={endRef} />
       </div>
