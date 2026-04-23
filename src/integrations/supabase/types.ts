@@ -203,23 +203,120 @@ export type Database = {
         }
         Relationships: []
       }
+      roles: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          is_admin: boolean
+          is_system: boolean
+          nome: string
+          pode_enviar_mensagens: boolean
+          pode_gerenciar_automacoes: boolean
+          pode_gerenciar_contatos: boolean
+          pode_gerenciar_integracoes: boolean
+          pode_gerenciar_numeros: boolean
+          pode_gerenciar_usuarios: boolean
+          pode_ver_automacoes: boolean
+          pode_ver_contatos: boolean
+          pode_ver_dashboard: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          is_admin?: boolean
+          is_system?: boolean
+          nome: string
+          pode_enviar_mensagens?: boolean
+          pode_gerenciar_automacoes?: boolean
+          pode_gerenciar_contatos?: boolean
+          pode_gerenciar_integracoes?: boolean
+          pode_gerenciar_numeros?: boolean
+          pode_gerenciar_usuarios?: boolean
+          pode_ver_automacoes?: boolean
+          pode_ver_contatos?: boolean
+          pode_ver_dashboard?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          is_admin?: boolean
+          is_system?: boolean
+          nome?: string
+          pode_enviar_mensagens?: boolean
+          pode_gerenciar_automacoes?: boolean
+          pode_gerenciar_contatos?: boolean
+          pode_gerenciar_integracoes?: boolean
+          pode_gerenciar_numeros?: boolean
+          pode_gerenciar_usuarios?: boolean
+          pode_ver_automacoes?: boolean
+          pode_ver_contatos?: boolean
+          pode_ver_dashboard?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
+          created_at: string
           id: string
-          role: Database["public"]["Enums"]["app_role"]
+          role_id: string
           user_id: string
         }
         Insert: {
+          created_at?: string
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role_id: string
           user_id: string
         }
         Update: {
+          created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role_id?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_whatsapp_numbers: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          whatsapp_number_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          whatsapp_number_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          whatsapp_number_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_whatsapp_numbers_whatsapp_number_id_fkey"
+            columns: ["whatsapp_number_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_numbers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_numbers: {
         Row: {
@@ -256,11 +353,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
+      has_permission: {
+        Args: { _permission: string; _user_id: string }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      user_can_access_number: {
+        Args: { _number_id: string; _user_id: string }
         Returns: boolean
       }
     }
