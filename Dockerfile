@@ -10,10 +10,12 @@ RUN npm run build
 
 FROM nginx:alpine
 
-# remove default nginx page
 RUN rm -rf /usr/share/nginx/html/*
 
-# copia SOMENTE o frontend gerado
+# tenta copiar dist normal
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# fallback se existir client
 COPY --from=builder /app/dist/client /usr/share/nginx/html
 
 EXPOSE 80
