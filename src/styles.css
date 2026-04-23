@@ -92,8 +92,8 @@
   --whatsapp: oklch(0.55 0.17 155);
   --whatsapp-dark: oklch(0.42 0.13 155);
   --whatsapp-light: oklch(0.92 0.05 155);
-  --chat-bg: oklch(0.95 0.01 80);
-  --chat-bubble-sent: oklch(0.88 0.06 155);
+  --chat-bg: oklch(0.93 0.015 130);
+  --chat-bubble-sent: oklch(0.92 0.08 150);
   --chat-bubble-received: oklch(1 0 0);
   --status-open: oklch(0.7 0.18 85);
   --status-active: oklch(0.6 0.2 250);

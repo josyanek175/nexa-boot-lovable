@@ -60,22 +60,23 @@ function MessageBubble({ message }: { message: MessageItem }) {
   const agentName = message.profiles?.nome;
 
   return (
-    <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-2`}>
+    <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1.5`}>
       <div
-        className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+        className={`relative max-w-[75%] rounded-lg px-3 py-1.5 text-sm shadow-sm ${
           isSent
-            ? "rounded-br-md bg-chat-bubble-sent text-foreground"
-            : "rounded-bl-md bg-chat-bubble-received text-foreground"
+            ? "rounded-tr-sm bg-chat-bubble-sent text-foreground"
+            : "rounded-tl-sm bg-chat-bubble-received text-foreground"
         }`}
       >
         {isSent && agentName && (
-          <p className="mb-1 text-[10px] font-semibold text-primary">{agentName}</p>
+          <p className="mb-0.5 text-[11px] font-semibold text-primary">{agentName}</p>
         )}
-        <p>{message.conteudo}</p>
-        <div className={`mt-1 flex items-center gap-1 ${isSent ? "justify-end" : "justify-start"}`}>
+        <p className="whitespace-pre-wrap break-words pr-12">{message.conteudo}</p>
+        <div className="float-right -mb-1 ml-2 mt-1 flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground">{time}</span>
           {isSent && <CheckCheck className="h-3 w-3 text-primary" />}
         </div>
+        <div className="clear-both" />
       </div>
     </div>
   );
