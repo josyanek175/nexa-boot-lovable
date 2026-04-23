@@ -375,12 +375,20 @@ function NumbersPage() {
       );
 
       setInstances(enriched);
+
+      // Sincroniza com a tabela whatsapp_numbers (best-effort)
+      try {
+        await syncNumbers(headers ? { headers } : {});
+        refreshNumberContext();
+      } catch (err) {
+        console.warn("Falha ao sincronizar whatsapp_numbers:", err);
+      }
     } catch {
       setError("Erro ao conectar com a Evolution API");
     } finally {
       setLoading(false);
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, syncNumbers, refreshNumberContext]);
 
   useEffect(() => {
     loadInstances();
