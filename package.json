@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "start": "npm run build && npx serve dist -l 3000"
+    "start": "node dist/server/index.js"
   },
   "dependencies": {
     "serve": "^14.2.0",
