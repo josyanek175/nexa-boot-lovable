@@ -19,6 +19,7 @@ import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicWebhookRouteImport } from './routes/api.public.webhook'
+import { Route as ApiEvolutionProxySplatRouteImport } from './routes/api.evolution-proxy.$'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -70,6 +71,11 @@ const ApiPublicWebhookRoute = ApiPublicWebhookRouteImport.update({
   path: '/api/public/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEvolutionProxySplatRoute = ApiEvolutionProxySplatRouteImport.update({
+  id: '/api/evolution-proxy/$',
+  path: '/api/evolution-proxy/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/numbers': typeof NumbersRoute
   '/settings': typeof SettingsRoute
+  '/api/evolution-proxy/$': typeof ApiEvolutionProxySplatRoute
   '/api/public/webhook': typeof ApiPublicWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/numbers': typeof NumbersRoute
   '/settings': typeof SettingsRoute
+  '/api/evolution-proxy/$': typeof ApiEvolutionProxySplatRoute
   '/api/public/webhook': typeof ApiPublicWebhookRoute
 }
 export interface FileRoutesById {
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/numbers': typeof NumbersRoute
   '/settings': typeof SettingsRoute
+  '/api/evolution-proxy/$': typeof ApiEvolutionProxySplatRoute
   '/api/public/webhook': typeof ApiPublicWebhookRoute
 }
 export interface FileRouteTypes {
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/numbers'
     | '/settings'
+    | '/api/evolution-proxy/$'
     | '/api/public/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/numbers'
     | '/settings'
+    | '/api/evolution-proxy/$'
     | '/api/public/webhook'
   id:
     | '__root__'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/numbers'
     | '/settings'
+    | '/api/evolution-proxy/$'
     | '/api/public/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -157,6 +169,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NumbersRoute: typeof NumbersRoute
   SettingsRoute: typeof SettingsRoute
+  ApiEvolutionProxySplatRoute: typeof ApiEvolutionProxySplatRoute
   ApiPublicWebhookRoute: typeof ApiPublicWebhookRoute
 }
 
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/evolution-proxy/$': {
+      id: '/api/evolution-proxy/$'
+      path: '/api/evolution-proxy/$'
+      fullPath: '/api/evolution-proxy/$'
+      preLoaderRoute: typeof ApiEvolutionProxySplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -245,6 +265,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NumbersRoute: NumbersRoute,
   SettingsRoute: SettingsRoute,
+  ApiEvolutionProxySplatRoute: ApiEvolutionProxySplatRoute,
   ApiPublicWebhookRoute: ApiPublicWebhookRoute,
 }
 export const routeTree = rootRouteImport
