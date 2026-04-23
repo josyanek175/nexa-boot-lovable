@@ -8,7 +8,10 @@ import {
   connectToInstance,
   disconnectInstance,
   restartEvolutionInstance,
+  syncWhatsappNumbers,
 } from "@/lib/evolution-api.functions";
+import { useActiveNumber } from "@/hooks/use-active-number";
+import { useServerFn } from "@tanstack/react-start";
 import {
   Circle,
   Phone,
@@ -325,6 +328,8 @@ function DeleteConfirmModal({
 // ── Main Page ──
 function NumbersPage() {
   const { session } = useAuth();
+  const { refresh: refreshNumberContext } = useActiveNumber();
+  const syncNumbers = useServerFn(syncWhatsappNumbers);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
