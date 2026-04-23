@@ -1,5 +1,6 @@
-import { Search, X, Clock, AlertTriangle, UserCheck, Inbox, CheckCircle2 } from "lucide-react";
+import { Search, X, Clock, AlertTriangle, UserCheck, Inbox, CheckCircle2, MessageSquarePlus } from "lucide-react";
 import { useState } from "react";
+import { NewConversationDialog } from "./NewConversationDialog";
 
 interface ConversationItem {
   id: string;
