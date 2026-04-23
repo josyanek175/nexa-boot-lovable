@@ -30,6 +30,7 @@ export function AppSidebar() {
   const { profile, role, isAdmin, signOut } = useAuth();
 
   const filteredItems = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const roleLabel = role?.nome ?? (isAdmin ? "Administrador" : "Atendente");
 
   const handleLogout = async () => {
     await signOut();
@@ -84,7 +85,7 @@ export function AppSidebar() {
             <p className="text-xs font-medium text-nav-foreground truncate">{profile?.nome ?? "Carregando..."}</p>
             <p className="text-[10px] text-nav-foreground/50 flex items-center gap-1">
               {isAdmin && <Shield className="h-3 w-3" />}
-              {role === "admin" ? "Administrador" : "Atendente"}
+              {roleLabel}
             </p>
           </div>
         </div>
