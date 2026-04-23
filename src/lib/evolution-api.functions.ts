@@ -258,3 +258,103 @@ export const configureWebhook = createServerFn({ method: "POST" })
       };
     }
   });
+
+// ── Sincroniza instâncias da Evolution → tabela whatsapp_numbers ──
+// Busca todas as instâncias na Evolution, faz upsert no banco e
+// remove do banco números que não existem mais na Evolution.
+export const syncWhatsappNumbers = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    try {
+      const instances = await fetchInstances();
+
+      const synced: { id: string; instance_name: string }[] = [];
+
+      for (const inst of instances) {
+        const instanceName = inst.name ?? inst.instanceName;
+        if (!instanceName) continue;
+
+        // Estado real
+        let state: "open" | "close" | "connecting" = "close";
+        try {
+          const s = await getConnectionState(instanceName);
+          state = s.state;
+        } catch {
+          // mantém close
+        }
+        const status =
+          state === "open" || inst.connectionStatus === "open"
+            ? "conectado"
+            : "desconectado";
+
+        // Telefone (ownerJid vem como "5511...@s.whatsapp.net")
+        const phoneRaw = inst.number ?? inst.ownerJid ?? null;
+        const phone_number = phoneRaw
+          ? phoneRaw.toString().replace(/@.*/, "").replace(/\D/g, "") || null
+          : null;
+
+        const nome = inst.profileName ?? instanceName;
+
+        // Upsert por instance_name
+        const { data: existing } = await supabaseAdmin
+          .from("whatsapp_numbers")
+          .select("id")
+          .eq("instance_name", instanceName)
+          .maybeSingle();
+
+        if (existing) {
+          await supabaseAdmin
+            .from("whatsapp_numbers")
+            .update({ nome, phone_number, status })
+            .eq("id", existing.id);
+          synced.push({ id: existing.id, instance_name: instanceName });
+        } else {
+          const { data: created } = await supabaseAdmin
+            .from("whatsapp_numbers")
+            .insert({ instance_name: instanceName, nome, phone_number, status })
+            .select("id")
+            .single();
+          if (created) synced.push({ id: created.id, instance_name: instanceName });
+        }
+      }
+
+      // Remove do banco os que não existem mais na Evolution
+      const liveNames = synced.map((s) => s.instance_name);
+      const { data: stale } = await supabaseAdmin
+        .from("whatsapp_numbers")
+        .select("id, instance_name");
+
+      const toDelete = (stale ?? [])
+        .filter((s) => !liveNames.includes(s.instance_name))
+        .map((s) => s.id);
+
+      if (toDelete.length > 0) {
+        // Só remove se não houver conversas vinculadas (preserva histórico)
+        const { data: usedNumbers } = await supabaseAdmin
+          .from("conversations")
+          .select("whatsapp_number_id")
+          .in("whatsapp_number_id", toDelete);
+        const usedIds = new Set((usedNumbers ?? []).map((u) => u.whatsapp_number_id));
+        const safeToDelete = toDelete.filter((id) => !usedIds.has(id));
+        if (safeToDelete.length > 0) {
+          await supabaseAdmin
+            .from("user_whatsapp_numbers")
+            .delete()
+            .in("whatsapp_number_id", safeToDelete);
+          await supabaseAdmin
+            .from("whatsapp_numbers")
+            .delete()
+            .in("id", safeToDelete);
+        }
+      }
+
+      return { synced: synced.length, error: null };
+    } catch (error) {
+      return {
+        synced: 0,
+        error:
+          error instanceof Error ? error.message : "Falha ao sincronizar números",
+      };
+    }
+  });
+
