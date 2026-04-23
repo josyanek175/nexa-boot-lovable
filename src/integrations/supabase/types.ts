@@ -20,6 +20,7 @@ export type Database = {
           email: string | null
           id: string
           nome: string
+          referencia: string | null
           telefone: string
           total_tentativas_sem_resposta: number
           ultima_conversa: string | null
@@ -32,6 +33,7 @@ export type Database = {
           email?: string | null
           id?: string
           nome: string
+          referencia?: string | null
           telefone: string
           total_tentativas_sem_resposta?: number
           ultima_conversa?: string | null
@@ -44,6 +46,7 @@ export type Database = {
           email?: string | null
           id?: string
           nome?: string
+          referencia?: string | null
           telefone?: string
           total_tentativas_sem_resposta?: number
           ultima_conversa?: string | null
