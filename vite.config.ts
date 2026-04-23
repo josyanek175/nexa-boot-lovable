@@ -12,6 +12,6 @@ export default defineConfig({
   },
   preview: {
     host: true,
-    allowedHosts: ['nexa.72.61.133.41.nip.io']
+    allowedHosts: 'all'
   }
-});
+})
