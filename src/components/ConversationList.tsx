@@ -28,6 +28,7 @@ interface ConversationListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   currentUserId?: string;
+  onConversationCreated?: (id: string) => void;
 }
 
 function timeAgo(dateStr: string) {
@@ -56,9 +57,10 @@ const STATUS_TABS = [
   { value: "finalizado", label: "Finalizadas", icon: CheckCircle2 },
 ] as const;
 
-export function ConversationList({ conversations, selectedId, onSelect, currentUserId }: ConversationListProps) {
+export function ConversationList({ conversations, selectedId, onSelect, currentUserId, onConversationCreated }: ConversationListProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<string>("all");
+  const [newOpen, setNewOpen] = useState(false);
 
   const counts = {
     all: conversations.length,
@@ -79,6 +81,16 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
   return (
     <div className="flex h-full w-80 flex-col border-r border-border bg-card lg:w-96">
       <div className="border-b border-border p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Conversas</h2>
+          <button
+            onClick={() => setNewOpen(true)}
+            className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+            Nova
+          </button>
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
