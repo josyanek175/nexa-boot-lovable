@@ -48,16 +48,15 @@ interface EvolutionMessageData {
 
 function extractText(message?: EvolutionMessageContent): string {
   if (!message) return "";
-  return (
-    message.conversation ??
-    message.extendedTextMessage?.text ??
-    message.imageMessage?.caption ??
-    message.videoMessage?.caption ??
-    message.documentMessage?.caption ??
-    (message.audioMessage ? "[áudio]" : "") ??
-    (message.documentMessage ? `[documento: ${message.documentMessage.fileName ?? "arquivo"}]` : "") ??
-    ""
-  );
+  if (message.conversation) return message.conversation;
+  if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+  if (message.imageMessage?.caption) return message.imageMessage.caption;
+  if (message.videoMessage?.caption) return message.videoMessage.caption;
+  if (message.documentMessage?.caption) return message.documentMessage.caption;
+  if (message.documentMessage)
+    return `[documento: ${message.documentMessage.fileName ?? "arquivo"}]`;
+  if (message.audioMessage) return "[áudio]";
+  return "";
 }
 
 async function processMessageUpsert(
