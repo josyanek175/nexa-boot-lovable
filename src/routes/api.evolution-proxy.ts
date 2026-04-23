@@ -4,11 +4,9 @@ import { createFileRoute } from "@tanstack/react-router";
 // Útil para chamadas manuais/debug. O sistema usa server functions internamente.
 
 const EVOLUTION_BASE_URL =
-  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") ||
-  "http://72.61.133.41:8080";
+  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") || "";
 
-const EVOLUTION_API_KEY =
-  process.env.EVOLUTION_API_KEY || "429683C4C977415CAAFFCE10F7D57E11";
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || "";
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +16,13 @@ const CORS: Record<string, string> = {
 };
 
 async function forward(request: Request) {
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "evolution_proxy_misconfigured", message: "EVOLUTION_API_URL or EVOLUTION_API_KEY missing in server env" }),
+      { status: 500, headers: { "Content-Type": "application/json", ...CORS } }
+    );
+  }
+
   const incoming = new URL(request.url);
   const rawPath = incoming.searchParams.get("path") ?? "";
   const cleanPath = rawPath.replace(/^\/+/, "");
