@@ -90,12 +90,39 @@ function ConversationsPage() {
 
   const fetchMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
-    const { data } = await supabase
+    const { data: msgs, error } = await supabase
       .from("messages")
-      .select("*, profiles:user_id(nome)")
+      .select("*")
       .eq("conversation_id", convId)
       .order("data_envio", { ascending: true });
-    setMessages(data ?? []);
+
+    if (error) {
+      console.error("Failed to load messages:", error);
+      setMessages([]);
+      setLoadingMsgs(false);
+      return;
+    }
+
+    // Lookup separado: buscar nomes dos atendentes (user_id → profiles)
+    const userIds = Array.from(
+      new Set((msgs ?? []).map((m: any) => m.user_id).filter(Boolean))
+    );
+    let profilesMap: Record<string, { nome: string }> = {};
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, nome")
+        .in("user_id", userIds as string[]);
+      (profs ?? []).forEach((p: any) => {
+        profilesMap[p.user_id] = { nome: p.nome };
+      });
+    }
+
+    const enriched = (msgs ?? []).map((m: any) => ({
+      ...m,
+      profiles: m.user_id ? profilesMap[m.user_id] ?? null : null,
+    }));
+    setMessages(enriched);
     setLoadingMsgs(false);
   }, []);
 

@@ -62,7 +62,7 @@ export const loadMessages = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { data: msgs, error } = await supabaseAdmin
       .from("messages")
-      .select("*, profiles:user_id(nome)")
+      .select("*")
       .eq("conversation_id", data.conversationId)
       .order("data_envio", { ascending: true });
 
@@ -71,7 +71,27 @@ export const loadMessages = createServerFn({ method: "POST" })
       return { messages: [], error: error.message };
     }
 
-    return { messages: msgs ?? [], error: null };
+    // Lookup separado dos nomes dos atendentes
+    const userIds = Array.from(
+      new Set((msgs ?? []).map((m) => m.user_id).filter(Boolean))
+    );
+    let profilesMap: Record<string, { nome: string }> = {};
+    if (userIds.length > 0) {
+      const { data: profs } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id, nome")
+        .in("user_id", userIds as string[]);
+      (profs ?? []).forEach((p: any) => {
+        profilesMap[p.user_id] = { nome: p.nome };
+      });
+    }
+
+    const enriched = (msgs ?? []).map((m) => ({
+      ...m,
+      profiles: m.user_id ? profilesMap[m.user_id] ?? null : null,
+    }));
+
+    return { messages: enriched, error: null };
   });
 
 // ── Send message: save to DB + send via Evolution API ──
