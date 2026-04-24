@@ -30,6 +30,7 @@ import { useActiveNumber } from "@/hooks/use-active-number";
 
 interface MessageItem {
   id: string;
+  external_id?: string | null;
   conteudo: string;
   tipo: string;
   data_envio: string;
@@ -124,7 +125,16 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   // Limpa otimistas quando a conversa muda ou quando mensagens reais chegam
   useEffect(() => {
     setOptimistic((prev) =>
-      prev.filter((o) => !messages.some((m) => m.conteudo === o.conteudo && m.tipo === "saida"))
+      prev.filter(
+        (o) =>
+          !messages.some(
+            (m) =>
+              m.tipo === o.tipo &&
+              m.user_id === o.user_id &&
+              m.conteudo === o.conteudo &&
+              Math.abs(new Date(m.data_envio).getTime() - new Date(o.data_envio).getTime()) < 30_000
+          )
+      )
     );
   }, [messages]);
 
@@ -132,9 +142,49 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
     setOptimistic([]);
   }, [conversation.id]);
 
-  const allMessages = [...messages, ...optimistic].sort(
-    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-  );
+  const allMessages = (() => {
+    const messageMap = new Map<string, MessageItem>();
+    const externalIdMap = new Map<string, string>();
+
+    for (const msg of messages) {
+      if (msg.external_id) {
+        const existingId = externalIdMap.get(msg.external_id);
+        if (existingId && messageMap.has(existingId)) {
+          messageMap.set(existingId, { ...messageMap.get(existingId), ...msg, id: existingId });
+          continue;
+        }
+
+        externalIdMap.set(msg.external_id, msg.id);
+      }
+
+      messageMap.set(msg.id, msg);
+    }
+
+    for (const optimisticMsg of optimistic) {
+      const matchedRealMessage = messages.find(
+        (msg) =>
+          msg.tipo === optimisticMsg.tipo &&
+          msg.user_id === optimisticMsg.user_id &&
+          msg.conteudo === optimisticMsg.conteudo &&
+          Math.abs(
+            new Date(msg.data_envio).getTime() - new Date(optimisticMsg.data_envio).getTime()
+          ) < 30_000
+      );
+
+      if (matchedRealMessage) {
+        messageMap.set(matchedRealMessage.id, matchedRealMessage);
+        continue;
+      }
+
+      if (!messageMap.has(optimisticMsg.id)) {
+        messageMap.set(optimisticMsg.id, optimisticMsg);
+      }
+    }
+
+    return Array.from(messageMap.values()).sort(
+      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+    );
+  })();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -200,9 +250,14 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
           prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
         );
       } else {
-        setOptimistic((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m))
-        );
+        const savedMessage = res?.message as MessageItem | null | undefined;
+        setOptimistic((prev) => {
+          if (!savedMessage) {
+            return prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m));
+          }
+
+          return prev.filter((m) => m.id !== tempId && m.id !== savedMessage.id);
+        });
       }
       onMessageSent();
     } catch (err) {
