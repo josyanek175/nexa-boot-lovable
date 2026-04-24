@@ -267,9 +267,9 @@ export const Route = createFileRoute("/api/public/webhook")({
         );
 
         // Filtro de instância: processa APENAS a instância configurada
-        const ALLOWED_INSTANCE = "tistecnociateste";
-        if (instance && instance !== ALLOWED_INSTANCE) {
-          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
+        // Filtro de instância: aceita variantes mapeadas em INSTANCE_UUID_MAP
+        if (instance && !ALLOWED_INSTANCES.includes(instance)) {
+          console.log(`[WEBHOOK] instância ignorada: "${instance}" (permitidas: ${ALLOWED_INSTANCES.join(", ")})`);
           return ok({ event, instance, ignored: true, reason: "instance not allowed" });
         }
 
