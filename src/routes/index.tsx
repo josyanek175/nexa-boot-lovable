@@ -150,6 +150,18 @@ function ConversationsPage() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Limpa caches locais ao trocar de número (evita exibir conversas antigas)
+  useEffect(() => {
+    setConversations([]);
+    setMessages([]);
+    setSelectedId(null);
+    messagesRef.current = [];
+  }, [activeNumberId]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
