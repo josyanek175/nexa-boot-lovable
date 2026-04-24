@@ -8,12 +8,11 @@ import { createFileRoute } from "@tanstack/react-router";
 // Uso no frontend: chame `/api/evolution-proxy/<path-da-evolution>`
 // Ex.: GET /api/evolution-proxy/instance/fetchInstances
 
+// SEMPRE lê dos Secrets do servidor — Global API Key única para todas as instâncias.
 const EVOLUTION_BASE_URL =
-  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") ||
-  "http://72.61.133.41:8080";
+  process.env.EVOLUTION_API_URL?.replace(/\/+$/, "") || "";
 
-const EVOLUTION_API_KEY =
-  process.env.EVOLUTION_API_KEY || "429683C4C977415CAAFFCE10F7D57E11";
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || "";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +22,19 @@ const CORS_HEADERS: Record<string, string> = {
 };
 
 async function forward(request: Request, splat: string | undefined) {
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+    return new Response(
+      JSON.stringify({
+        error: "evolution_proxy_misconfigured",
+        message:
+          "EVOLUTION_API_URL ou EVOLUTION_API_KEY não configurados nos Secrets do servidor.",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+      }
+    );
+  }
   const path = splat ? `/${splat}` : "";
   const incomingUrl = new URL(request.url);
   const targetUrl = `${EVOLUTION_BASE_URL}${path}${incomingUrl.search}`;

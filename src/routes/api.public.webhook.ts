@@ -99,7 +99,9 @@ async function processMessageUpsert(
       return { persisted: false, reason: "could not create whatsapp_number" };
     }
     wppId = created.id;
-    console.log("[webhook] auto-created whatsapp_number for instance:", instanceName);
+    console.log(
+      `[webhook] auto-registered new whatsapp instance "${instanceName}" (id=${wppId}). Future messages from this instance will be accepted.`
+    );
   }
 
   // 2. Resolver contato (telefone limpo)

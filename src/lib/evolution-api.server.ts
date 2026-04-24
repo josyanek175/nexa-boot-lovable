@@ -46,10 +46,18 @@ export interface EvolutionConfig {
   webhookSecret: string;
 }
 
-// Carrega config salva no Supabase, com fallback para env vars.
+// Carrega config da Evolution API.
+// PRIORIDADE: Secrets do servidor (EVOLUTION_API_KEY / EVOLUTION_API_URL)
+// SEMPRE vencem sobre o que estiver salvo no banco. Isso garante que a
+// "Global API Key" cadastrada nos Secrets seja usada em TODAS as chamadas,
+// para qualquer instância/número, sem depender do que o usuário digitou no
+// formulário de Integrações.
 export async function loadEvolutionConfig(): Promise<EvolutionConfig> {
-  let url = process.env.EVOLUTION_API_URL ?? "";
-  let apiKey = process.env.EVOLUTION_API_KEY ?? "";
+  const envUrl = process.env.EVOLUTION_API_URL ?? "";
+  const envKey = process.env.EVOLUTION_API_KEY ?? "";
+
+  let url = envUrl;
+  let apiKey = envKey;
   let webhookUrl = "";
   let webhookSecret = "";
 
@@ -61,8 +69,9 @@ export async function loadEvolutionConfig(): Promise<EvolutionConfig> {
       .maybeSingle();
 
     if (data) {
-      if (data.evolution_api_url) url = data.evolution_api_url;
-      if (data.evolution_api_key) apiKey = data.evolution_api_key;
+      // Banco só é usado como fallback se o Secret não estiver definido.
+      if (!url && data.evolution_api_url) url = data.evolution_api_url;
+      if (!apiKey && data.evolution_api_key) apiKey = data.evolution_api_key;
       webhookUrl = data.webhook_url ?? "";
       webhookSecret = data.webhook_secret ?? "";
     }
