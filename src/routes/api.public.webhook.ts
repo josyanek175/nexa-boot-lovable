@@ -185,10 +185,9 @@ async function processMessageUpsert(
     contact = created;
   } else {
     console.log(`[webhook] contato encontrado: id=${contact.id} telefone=${contact.telefone}`);
-    const updates: Record<string, unknown> = {
+    const updates: { ultima_interacao: string; nome?: string; is_temporary?: boolean } = {
       ultima_interacao: new Date().toISOString(),
     };
-    // Atualiza nome se o atual era temporário e agora veio pushName
     if (data.pushName) {
       updates.nome = data.pushName;
       updates.is_temporary = false;
