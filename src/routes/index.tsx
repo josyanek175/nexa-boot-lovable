@@ -159,10 +159,6 @@ function ConversationsPage() {
   }, [activeNumberId]);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
-
-  useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
