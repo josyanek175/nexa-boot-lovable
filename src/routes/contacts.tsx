@@ -82,7 +82,7 @@ function ContactsPage() {
   };
   const saveEdit = async (id: string) => {
     const nome = draft.nome.trim();
-    const telefone = draft.telefone.replace(/\D/g, "");
+    const telefone = normalizePhone(draft.telefone);
     if (!nome || telefone.length < 8) {
       toast.error("Nome e telefone válido são obrigatórios.");
       return;
