@@ -113,39 +113,13 @@ async function processMessageUpsert(
     return { persisted: false, reason: "fromMe ignored" };
   }
 
-  // 1. Resolver instância
-  const { data: wpp, error: wppErr } = await supabaseAdmin
-    .from("whatsapp_numbers")
-    .select("id")
-    .eq("instance_name", instanceName)
-    .maybeSingle();
-
-  if (wppErr) {
-    console.error("[webhook] whatsapp_numbers lookup error:", wppErr);
-    return { persisted: false, reason: `db error: ${wppErr.message}` };
-  }
-
-  // Auto-cria registro de número se não existir (suporte multi-instância)
-  let wppId = wpp?.id;
+  // 1. Resolver instância — força mapeamento canônico para o UUID configurado.
+  const wppId = INSTANCE_UUID_MAP[instanceName];
   if (!wppId) {
-    const { data: created, error: createErr } = await supabaseAdmin
-      .from("whatsapp_numbers")
-      .insert({
-        instance_name: instanceName,
-        nome: instanceName,
-        status: "conectado",
-      })
-      .select("id")
-      .single();
-    if (createErr || !created) {
-      console.error("[webhook] failed to auto-create whatsapp_number:", createErr);
-      return { persisted: false, reason: "could not create whatsapp_number" };
-    }
-    wppId = created.id;
-    console.log(
-      `[webhook] auto-registered new whatsapp instance "${instanceName}" (id=${wppId}). Future messages from this instance will be accepted.`
-    );
+    console.warn(`[WEBHOOK] instância desconhecida ignorada: "${instanceName}"`);
+    return { persisted: false, reason: "instance not mapped" };
   }
+  console.log(`[WEBHOOK] Recebido da instância ${instanceName}, salvando como UUID ${wppId}`);
 
   // 2. Resolver contato (telefone limpo)
   const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
