@@ -42,6 +42,13 @@ function ConversationsPage() {
       .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
   }, []);
 
+  const upsertRealtimeMessage = useCallback(
+    (incoming: any) => {
+      setMessages((prev) => dedupeMessages([...prev, incoming]));
+    },
+    [dedupeMessages]
+  );
+
   const fetchConversations = useCallback(async () => {
     setLoadingConvs(true);
     let query = supabase
@@ -172,34 +179,15 @@ function ConversationsPage() {
     }
   }, [selectedId, fetchMessages]);
 
-  // Realtime: messages + conversations
+  // Realtime: lista de conversas
   useEffect(() => {
     const channel = supabase
-      .channel("chat-realtime")
+      .channel("chat-conversations-realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           console.log("Nova mensagem recebida:", payload);
-          const newMsg = payload.new as any;
-          const currentSelectedId = selectedIdRef.current;
-
-          if (currentSelectedId && newMsg.conversation_id === currentSelectedId) {
-            const newMessageKey = newMsg.message_id ?? newMsg.id;
-
-            setMessages((prev) => {
-              const exists = prev.find(
-                (message) => (message.message_id ?? message.id) === newMessageKey
-              );
-
-              if (exists) return prev;
-
-              return [...prev, newMsg].sort(
-                (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-              );
-            });
-          }
-
           fetchConversations();
         }
       )
@@ -215,7 +203,52 @@ function ConversationsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [dedupeMessages, fetchConversations]);
+  }, [fetchConversations]);
+
+  // Realtime: mensagens da conversa aberta, sem filtro rígido por instância
+  useEffect(() => {
+    if (!selectedId) return;
+
+    const channel = supabase
+      .channel(`chat-messages-${selectedId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        async (payload) => {
+          console.log("Mensagem da conversa aberta recebida em tempo real:", payload);
+          const newMsg = payload.new as any;
+
+          if (newMsg.user_id) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("nome")
+              .eq("user_id", newMsg.user_id)
+              .maybeSingle();
+
+            upsertRealtimeMessage({
+              ...newMsg,
+              profiles: profile ? { nome: profile.nome } : null,
+            });
+            return;
+          }
+
+          upsertRealtimeMessage({
+            ...newMsg,
+            profiles: null,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedId, upsertRealtimeMessage]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId);
 
