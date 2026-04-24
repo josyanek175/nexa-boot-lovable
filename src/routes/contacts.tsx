@@ -166,7 +166,7 @@ function ContactsPage() {
         return;
       }
 
-      const { error } = await supabase.from("contacts").insert(newContacts);
+      const { error } = await supabase.from("contacts").upsert(newContacts, { onConflict: "telefone" });
       if (error) throw error;
 
       toast.success(`${newContacts.length} contato(s) importado(s). ${parsed.length - newContacts.length} duplicado(s) ignorado(s).`);
