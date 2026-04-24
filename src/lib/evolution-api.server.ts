@@ -231,24 +231,20 @@ export async function sendTextMessage(
   remoteJid: string,
   text: string
 ) {
-  // Secret EVOLUTION_INSTANCE_NAME tem prioridade absoluta sobre o nome
-  // recebido como argumento. Isso permite forçar uma única instância global
-  // mesmo quando há múltiplas cadastradas na Evolution API.
-  const forcedInstance = (process.env.EVOLUTION_INSTANCE_NAME ?? "").trim();
-  const instance = forcedInstance || instanceName;
+  // Envio dinâmico: SEMPRE usa a instância da conversa atual (multi-instância).
+  // O secret EVOLUTION_INSTANCE_NAME só é usado como fallback se não vier instância.
+  const fallbackInstance = (process.env.EVOLUTION_INSTANCE_NAME ?? "").trim();
+  const instance = (instanceName ?? "").trim() || fallbackInstance;
 
   if (!instance) {
     throw new Error(
-      "Instância da Evolution não definida. Configure o secret EVOLUTION_INSTANCE_NAME."
+      "Instância da Evolution não definida para esta conversa."
     );
   }
 
   const number = formatWhatsappJid(remoteJid);
 
-  // Endpoint obrigatório (Evolution v2):
-  // POST {EVOLUTION_API_URL}/message/sendText/{instance}
-  // Body: { number, textMessage: { text } }  — também envia `text` no topo
-  // por compatibilidade com algumas versões/forks da Evolution v2.
+  // Endpoint Evolution v2: POST {EVOLUTION_API_URL}/message/sendText/{instance}
   return evolutionFetch(`/message/sendText/${instance}`, {
     method: "POST",
     body: JSON.stringify({
