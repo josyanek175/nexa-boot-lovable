@@ -184,11 +184,12 @@ export const findOrCreateConversation = createServerFn({ method: "POST" })
     (data: { contactPhone: string; contactName: string; whatsappNumberId: string }) => data
   )
   .handler(async ({ data }) => {
+    const phone = normalizePhone(data.contactPhone);
     // Find or create contact
     let { data: contact } = await supabaseAdmin
       .from("contacts")
       .select("id")
-      .eq("telefone", data.contactPhone.replace(/\D/g, ""))
+      .eq("telefone", phone)
       .single();
 
     if (!contact) {
@@ -196,7 +197,7 @@ export const findOrCreateConversation = createServerFn({ method: "POST" })
         .from("contacts")
         .insert({
           nome: data.contactName,
-          telefone: data.contactPhone.replace(/\D/g, ""),
+          telefone: phone,
         })
         .select("id")
         .single();
