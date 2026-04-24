@@ -125,6 +125,19 @@ function ContactsPage() {
     fetchContacts();
   };
 
+  const deleteContact = async (contact: ContactRow) => {
+    if (!window.confirm(`Excluir o contato "${contact.nome}"? Essa ação não pode ser desfeita.`)) return;
+    setSaving(true);
+    const { error } = await supabase.from("contacts").delete().eq("id", contact.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao excluir: " + error.message);
+      return;
+    }
+    toast.success("Contato excluído");
+    setContacts((prev) => prev.filter((c) => c.id !== contact.id));
+  };
+
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
