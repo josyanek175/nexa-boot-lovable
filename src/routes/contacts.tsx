@@ -13,7 +13,6 @@ import {
   statusColors,
   parseCSVContacts,
 } from "@/lib/crm-utils";
-import { normalizePhone } from "@/lib/phone-utils";
 
 export const Route = createFileRoute("/contacts")({
   component: ContactsPage,
@@ -82,7 +81,7 @@ function ContactsPage() {
   };
   const saveEdit = async (id: string) => {
     const nome = draft.nome.trim();
-    const telefone = normalizePhone(draft.telefone);
+    const telefone = draft.telefone.replace(/\D/g, "");
     if (!nome || telefone.length < 8) {
       toast.error("Nome e telefone válido são obrigatórios.");
       return;
@@ -104,7 +103,7 @@ function ContactsPage() {
 
   const createContact = async () => {
     const nome = newDraft.nome.trim();
-    const telefone = normalizePhone(newDraft.telefone);
+    const telefone = newDraft.telefone.replace(/\D/g, "");
     if (!nome || telefone.length < 8) {
       toast.error("Nome e telefone válido são obrigatórios.");
       return;

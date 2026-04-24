@@ -214,15 +214,28 @@ export async function reconnectInstance(instanceName: string) {
 // ── Mensagens ──
 // Formata o número no padrão exigido pela Evolution API: "<digits>@s.whatsapp.net".
 // Aceita entradas como "5511999999999", "55 11 99999-9999" ou já no formato JID.
+/**
+ * Remove o 9º dígito de números móveis brasileiros (formato 55 + DDD + 9XXXXXXXX).
+ * A Evolution/WhatsApp roteia melhor sem o 9 extra para muitos contatos antigos.
+ * Mantém intactos números internacionais e números fixos.
+ */
+function normalizeBrazilianNumber(digits: string): string {
+  // 55 + DDD (2) + 9 + 8 dígitos = 13 caracteres
+  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}
+
 function formatWhatsappJid(input: string): string {
   if (!input) return input;
   // Se já tem @, mantém o sufixo original (pode ser @g.us para grupos)
   if (input.includes("@")) {
     const [num, suffix] = input.split("@");
-    const digits = num.replace(/\D/g, "");
+    const digits = normalizeBrazilianNumber(num.replace(/\D/g, ""));
     return `${digits}@${suffix}`;
   }
-  const digits = input.replace(/\D/g, "");
+  const digits = normalizeBrazilianNumber(input.replace(/\D/g, ""));
   return `${digits}@s.whatsapp.net`;
 }
 

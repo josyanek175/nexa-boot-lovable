@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { normalizePhone } from "@/lib/phone-utils";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -140,7 +139,7 @@ async function processMessageUpsert(
   }
 
   // 2. Resolver contato (telefone limpo)
-  const phone = normalizePhone(remoteJid.replace(/@.*/, ""));
+  const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
   let { data: contact } = await supabaseAdmin
