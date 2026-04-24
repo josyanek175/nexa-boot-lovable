@@ -121,19 +121,17 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
-  const allMessages = (() => {
-    const uniqueMessages = new Map<string, MessageItem>();
-
-    for (const msg of messages) {
-      const identity = msg.message_id ?? msg.external_id ?? msg.id;
-      const existing = uniqueMessages.get(identity);
-      uniqueMessages.set(identity, existing ? { ...existing, ...msg } : msg);
-    }
-
-    return Array.from(uniqueMessages.values()).sort(
-      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-    );
-  })();
+  // Fonte única: o array vem do banco via Realtime.
+  // Filtro simples para impedir qualquer duplicata visual.
+  const allMessages = messages
+    .filter((v, i, a) => {
+      const key = v.message_id ?? v.external_id ?? v.id;
+      return (
+        a.findIndex((t) => (t.message_id ?? t.external_id ?? t.id) === key) === i
+      );
+    })
+    .slice()
+    .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
