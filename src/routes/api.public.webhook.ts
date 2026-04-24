@@ -178,23 +178,27 @@ async function processMessageUpsert(
     conv = createdConv;
   }
 
-  // 4. Mensagem
-  const { error: msgErr } = await supabaseAdmin.from("messages").insert({
-    conversation_id: conv.id,
-    whatsapp_number_id: wppId,
-    conteudo: text,
-    tipo: isFromMe ? "saida" : "entrada",
-    external_id: externalId ?? null,
-  });
+  // 4. Mensagem — try/catch para garantir que erro 23505 (duplicidade) não trave o processo
+  try {
+    const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+      conversation_id: conv.id,
+      whatsapp_number_id: wppId,
+      conteudo: text,
+      tipo: isFromMe ? "saida" : "entrada",
+      external_id: externalId ?? null,
+    });
 
-  if (msgErr) {
-    // 23505 = unique violation → tratada como duplicata silenciosa
-    if ((msgErr as { code?: string }).code === "23505") {
-      console.log(`[webhook] unique violation ignorada: external_id=${externalId}`);
-      return { persisted: false, reason: "duplicate (unique constraint)" };
+    if (msgErr) {
+      if ((msgErr as { code?: string }).code === "23505") {
+        console.log(`[WEBHOOK] duplicidade ignorada (23505): external_id=${externalId}`);
+        return { persisted: false, reason: "duplicate (unique constraint)" };
+      }
+      console.error("[WEBHOOK] message insert error:", msgErr);
+      return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
     }
-    console.error("[webhook] message insert error:", msgErr);
-    return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
+  } catch (err) {
+    console.error("[WEBHOOK] message insert exception:", err);
+    return { persisted: false, reason: "message insert exception" };
   }
 
   return { persisted: true };
