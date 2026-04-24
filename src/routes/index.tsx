@@ -207,13 +207,6 @@ function ConversationsPage() {
 
   const selectedConv = conversations.find((c) => c.id === selectedId);
 
-  const handleMessageSent = () => {
-    if (selectedId) {
-      fetchMessages(selectedId);
-      fetchConversations();
-    }
-  };
-
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2.5">
@@ -246,7 +239,6 @@ function ConversationsPage() {
             <ChatView
               conversation={selectedConv}
               messages={messages}
-              onMessageSent={handleMessageSent}
               onConversationUpdate={fetchConversations}
             />
           )
