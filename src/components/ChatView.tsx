@@ -132,9 +132,38 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
     setOptimistic([]);
   }, [conversation.id]);
 
-  const allMessages = [...messages, ...optimistic].sort(
-    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-  );
+  const allMessages = (() => {
+    const messageMap = new Map<string, MessageItem>();
+
+    for (const msg of messages) {
+      messageMap.set(msg.id, msg);
+    }
+
+    for (const optimisticMsg of optimistic) {
+      const matchedRealMessage = messages.find(
+        (msg) =>
+          msg.tipo === optimisticMsg.tipo &&
+          msg.user_id === optimisticMsg.user_id &&
+          msg.conteudo === optimisticMsg.conteudo &&
+          Math.abs(
+            new Date(msg.data_envio).getTime() - new Date(optimisticMsg.data_envio).getTime()
+          ) < 30_000
+      );
+
+      if (matchedRealMessage) {
+        messageMap.set(matchedRealMessage.id, matchedRealMessage);
+        continue;
+      }
+
+      if (!messageMap.has(optimisticMsg.id)) {
+        messageMap.set(optimisticMsg.id, optimisticMsg);
+      }
+    }
+
+    return Array.from(messageMap.values()).sort(
+      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+    );
+  })();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -200,9 +229,14 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
           prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
         );
       } else {
-        setOptimistic((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m))
-        );
+        const savedMessage = res?.message as MessageItem | null | undefined;
+        setOptimistic((prev) => {
+          if (!savedMessage) {
+            return prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m));
+          }
+
+          return prev.filter((m) => m.id !== tempId && m.id !== savedMessage.id);
+        });
       }
       onMessageSent();
     } catch (err) {
