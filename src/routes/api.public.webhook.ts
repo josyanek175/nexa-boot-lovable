@@ -137,7 +137,20 @@ async function processMessageUpsert(
     );
   }
 
-  // 2. Resolver contato (telefone limpo)
+  // Dedup PER-INSTANCE: se já existe mensagem com esse external_id PARA esta instância, ignora.
+  if (externalId) {
+    const { data: existing } = await supabaseAdmin
+      .from("messages")
+      .select("id")
+      .eq("external_id", externalId)
+      .eq("whatsapp_number_id", wppId)
+      .maybeSingle();
+    if (existing) {
+      console.log(`[webhook] duplicada ignorada: external_id=${externalId} instance=${instanceName}`);
+      return { persisted: false, reason: "duplicate external_id for instance" };
+    }
+  }
+
   const phone = normalizePhone(remoteJid.replace(/@.*/, ""));
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
