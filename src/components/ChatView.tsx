@@ -121,21 +121,20 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
-  // Fonte única: o array vem do banco via Realtime.
-  // Filtro simples para impedir qualquer duplicata visual.
-  const allMessages = messages
-    .filter((v, i, a) => {
-      const key = v.message_id ?? v.external_id ?? v.id;
-      return (
-        a.findIndex((t) => (t.message_id ?? t.external_id ?? t.id) === key) === i
-      );
-    })
+  const uniqueMessages = messages
+    .filter(
+      (msg, index, self) =>
+        index ===
+        self.findIndex(
+          (t) => t.message_id === msg.message_id || t.id === msg.id
+        )
+    )
     .slice()
     .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [allMessages.length]);
+  }, [uniqueMessages.length]);
 
   const numberData = numbers.find((n) => n.id === conversation.whatsapp_number_id);
   const contactName = conversation.contacts?.nome ?? "Desconhecido";
@@ -381,7 +380,7 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-pattern custom-scrollbar px-4 py-4">
-        {allMessages.length === 0 ? (
+        {uniqueMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="rounded-lg bg-card/80 px-4 py-2 text-xs text-muted-foreground shadow-sm">
               Nenhuma mensagem ainda. Envie a primeira!
@@ -390,7 +389,7 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
         ) : (
           (() => {
             let lastDate = "";
-            return allMessages.map((msg) => {
+            return uniqueMessages.map((msg) => {
               const d = new Date(msg.data_envio);
               const dateLabel = d.toLocaleDateString("pt-BR", {
                 day: "2-digit",
