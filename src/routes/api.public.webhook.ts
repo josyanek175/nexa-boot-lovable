@@ -297,17 +297,35 @@ export const Route = createFileRoute("/api/public/webhook")({
           (payload.instance as string) ??
           (payload.instanceName as string) ??
           "";
+        // Evolution v2 envia o ID da instância no payload. Pode vir em vários campos.
+        const instanceObj = (payload.instance && typeof payload.instance === "object"
+          ? (payload.instance as Record<string, unknown>)
+          : null);
+        const instanceId =
+          (payload.instanceId as string) ??
+          (payload.instance_id as string) ??
+          (instanceObj?.instanceId as string) ??
+          (instanceObj?.id as string) ??
+          "";
         const data = payload.data as EvolutionMessageData | undefined;
 
         console.log(
-          `[webhook] event=${event} instance=${instance} hasData=${!!data}`
+          `[webhook] event=${event} instance=${instance} instanceId=${instanceId} hasData=${!!data}`
         );
 
-        // Filtro de instância: processa APENAS a instância configurada
-        const ALLOWED_INSTANCE = "tistecnociateste";
-        if (instance && instance !== ALLOWED_INSTANCE) {
-          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
-          return ok({ event, instance, ignored: true, reason: "instance not allowed" });
+        // ID OFICIAL da nossa instância na Evolution.
+        const ALLOWED_INSTANCE_ID = "148820d1-cd48-46f4-bbf4-3de46c1e6d81";
+        const ALLOWED_INSTANCE_NAME = "tistecnociateste";
+
+        // Filtro: aceita se instanceId bate (preferencial) OU, na ausência dele,
+        // se o nome da instância bater.
+        const matchesId = instanceId && instanceId === ALLOWED_INSTANCE_ID;
+        const matchesName = !instanceId && instance === ALLOWED_INSTANCE_NAME;
+        if (!matchesId && !matchesName) {
+          console.log(
+            `[webhook] instância ignorada: name="${instance}" id="${instanceId}" (esperado id=${ALLOWED_INSTANCE_ID})`
+          );
+          return ok({ event, instance, instanceId, ignored: true, reason: "instance not allowed" });
         }
 
         try {
@@ -315,12 +333,11 @@ export const Route = createFileRoute("/api/public/webhook")({
           if (
             (normalizedEvent === "messages.upsert" ||
               normalizedEvent === "send.message") &&
-            data &&
-            instance
+            data
           ) {
-            const result = await processMessageUpsert(instance, data);
+            const result = await processMessageUpsert(ALLOWED_INSTANCE_NAME, data);
             console.log(`[webhook] processed in ${Date.now() - startedAt}ms`, result);
-            return ok({ event, instance, ...result });
+            return ok({ event, instance: ALLOWED_INSTANCE_NAME, instanceId, ...result });
           }
 
           // Eventos não tratados ainda — responde OK para evitar retry
