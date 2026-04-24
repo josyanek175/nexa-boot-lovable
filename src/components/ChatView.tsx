@@ -102,6 +102,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const [sending, setSending] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
   const [attendants, setAttendants] = useState<Array<{ user_id: string; nome: string; email: string }>>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, isAdmin } = useAuth();
