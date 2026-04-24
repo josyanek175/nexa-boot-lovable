@@ -109,17 +109,21 @@ function ContactsPage() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("contacts").insert({
-      nome,
-      telefone,
-      referencia: newDraft.referencia.trim() || null,
-    });
+    const { error } = await supabase.from("contacts").upsert(
+      {
+        nome,
+        telefone,
+        referencia: newDraft.referencia.trim() || null,
+        is_temporary: false,
+      },
+      { onConflict: "telefone" }
+    );
     setSaving(false);
     if (error) {
       toast.error("Erro: " + error.message);
       return;
     }
-    toast.success("Contato criado");
+    toast.success("Contato salvo (criado ou atualizado)");
     setCreating(false);
     setNewDraft({ nome: "", telefone: "", referencia: "" });
     fetchContacts();
@@ -162,7 +166,7 @@ function ContactsPage() {
         return;
       }
 
-      const { error } = await supabase.from("contacts").insert(newContacts);
+      const { error } = await supabase.from("contacts").upsert(newContacts, { onConflict: "telefone" });
       if (error) throw error;
 
       toast.success(`${newContacts.length} contato(s) importado(s). ${parsed.length - newContacts.length} duplicado(s) ignorado(s).`);
