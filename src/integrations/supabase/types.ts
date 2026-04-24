@@ -161,6 +161,7 @@ export type Database = {
           conversation_id: string
           created_at: string
           data_envio: string
+          external_id: string | null
           id: string
           tipo: Database["public"]["Enums"]["message_type"]
           user_id: string | null
@@ -171,6 +172,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           data_envio?: string
+          external_id?: string | null
           id?: string
           tipo: Database["public"]["Enums"]["message_type"]
           user_id?: string | null
@@ -181,6 +183,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           data_envio?: string
+          external_id?: string | null
           id?: string
           tipo?: Database["public"]["Enums"]["message_type"]
           user_id?: string | null
