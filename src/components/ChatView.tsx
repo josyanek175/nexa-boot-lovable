@@ -405,7 +405,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-pattern custom-scrollbar px-4 py-4">
-        {messages.length === 0 ? (
+        {allMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="rounded-lg bg-card/80 px-4 py-2 text-xs text-muted-foreground shadow-sm">
               Nenhuma mensagem ainda. Envie a primeira!
@@ -414,7 +414,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
         ) : (
           (() => {
             let lastDate = "";
-            return messages.map((msg) => {
+            return allMessages.map((msg) => {
               const d = new Date(msg.data_envio);
               const dateLabel = d.toLocaleDateString("pt-BR", {
                 day: "2-digit",
