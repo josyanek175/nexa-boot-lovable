@@ -30,6 +30,7 @@ import { useActiveNumber } from "@/hooks/use-active-number";
 
 interface MessageItem {
   id: string;
+  message_id?: string | null;
   external_id?: string | null;
   conteudo: string;
   tipo: string;
@@ -120,9 +121,19 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
-  const allMessages = Array.from(new Map(messages.map((msg) => [msg.id, msg])).values()).sort(
-    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-  );
+  const allMessages = (() => {
+    const uniqueMessages = new Map<string, MessageItem>();
+
+    for (const msg of messages) {
+      const identity = msg.message_id ?? msg.external_id ?? msg.id;
+      const existing = uniqueMessages.get(identity);
+      uniqueMessages.set(identity, existing ? { ...existing, ...msg } : msg);
+    }
+
+    return Array.from(uniqueMessages.values()).sort(
+      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+    );
+  })();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });

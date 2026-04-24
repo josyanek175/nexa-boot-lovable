@@ -31,24 +31,15 @@ function ConversationsPage() {
   const selectedIdRef = useRef<string | null>(null);
 
   const dedupeMessages = useCallback((items: any[]) => {
-    const byId = new Map<string, any>();
-    const byExternalId = new Map<string, string>();
+    const uniqueMessages = new Map<string, any>();
 
     for (const item of items) {
-      if (item.external_id) {
-        const existingId = byExternalId.get(item.external_id);
-        if (existingId && byId.has(existingId)) {
-          byId.set(existingId, { ...byId.get(existingId), ...item, id: existingId });
-          continue;
-        }
-
-        byExternalId.set(item.external_id, item.id);
-      }
-
-      byId.set(item.id, item);
+      const identity = item.message_id ?? item.external_id ?? item.id;
+      const existing = uniqueMessages.get(identity);
+      uniqueMessages.set(identity, existing ? { ...existing, ...item } : item);
     }
 
-    return Array.from(byId.values()).sort(
+    return Array.from(uniqueMessages.values()).sort(
       (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
     );
   }, []);
@@ -182,7 +173,10 @@ function ConversationsPage() {
           const newMsg = payload.new as any;
           const currentSelectedId = selectedIdRef.current;
           const alreadyExists = messagesRef.current.some(
-            (msg) => msg.id === newMsg.id || (!!newMsg.external_id && msg.external_id === newMsg.external_id)
+            (msg) =>
+              msg.id === newMsg.id ||
+              (!!newMsg.message_id && msg.message_id === newMsg.message_id) ||
+              (!!newMsg.external_id && msg.external_id === newMsg.external_id)
           );
 
           if (currentSelectedId && newMsg.conversation_id === currentSelectedId && !alreadyExists) {

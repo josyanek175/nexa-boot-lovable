@@ -97,11 +97,10 @@ async function processMessageUpsert(
     }
   }
 
-  // Ignora mensagens fromMe (já gravadas localmente pelo optimistic UI no envio).
-  // Se não houver external_id não temos como confirmar duplicidade — mesmo assim ignoramos
-  // para evitar eco do próprio envio.
+  // Ignora mensagens fromMe para evitar eco do próprio envio no chat.
+  // A mensagem enviada pelo usuário já entra no banco pelo fluxo de envio manual.
   if (isFromMe) {
-    console.log(`[webhook] fromMe ignorado (já salvo localmente): external_id=${externalId ?? "n/a"}`);
+    console.log(`[webhook] fromMe ignorado para evitar duplicidade: external_id=${externalId ?? "n/a"}`);
     return { persisted: false, reason: "fromMe ignored" };
   }
 
