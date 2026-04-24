@@ -12,7 +12,9 @@ import {
   UserCog,
   CheckCircle2,
   RotateCcw,
+  UserPlus2,
 } from "lucide-react";
+import { AddContactDialog } from "@/components/AddContactDialog";
 import { sendChatMessage } from "@/lib/chat.functions";
 import {
   assumirConversa,
