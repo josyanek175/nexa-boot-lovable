@@ -241,98 +241,117 @@ async function processMessageUpsert(
   return { persisted: true };
 }
 
+// IDs/nomes oficiais da nossa instância na Evolution.
+const ALLOWED_INSTANCE_ID = "148820d1-cd48-46f4-bbf4-3de46c1e6d81";
+const ALLOWED_INSTANCE_NAME = "tistecnociateste";
+
 export const Route = createFileRoute("/api/public/webhook")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
 
-      // GET para health-check / verificação manual
       GET: async () =>
         new Response(
           JSON.stringify({
             ok: true,
-            message: "Webhook endpoint ativo. Envie POST com payload da Evolution API.",
+            message: "Webhook ativo. Envie POST com payload da Evolution API.",
             timestamp: new Date().toISOString(),
           }),
           { status: 200, headers: JSON_HEADERS }
         ),
 
-      POST: async ({ request }) => {
+      POST: async (ctx) => {
+        // Proteção: contexto pode chegar incompleto em alguns casos
+        const request = ctx?.request as Request | undefined;
+        if (!request) {
+          console.warn("[webhook] request indefinido no contexto");
+          return ok({ ignored: true, reason: "no request" });
+        }
+
         const startedAt = Date.now();
 
-        // Validação opcional do secret
         try {
-          const { data: settings } = await supabaseAdmin
-            .from("integration_settings")
-            .select("webhook_secret")
-            .limit(1)
-            .maybeSingle();
-
-          const expectedSecret = settings?.webhook_secret;
-          if (expectedSecret) {
-            const provided =
-              request.headers.get("x-webhook-secret") ??
-              request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-            if (provided !== expectedSecret) {
-              console.warn("[webhook] invalid secret");
-              return fail(401, "Invalid webhook secret");
-            }
+          // 1. Lê body com tolerância a corpo vazio
+          let rawBody = "";
+          try {
+            rawBody = await request.text();
+          } catch (err) {
+            console.error("[webhook] erro lendo body:", err);
+            return ok({ ignored: true, reason: "could not read body" });
           }
-        } catch (err) {
-          console.error("[webhook] secret check error:", err);
-        }
 
-        let payload: Record<string, unknown> = {};
-        try {
-          payload = (await request.json()) as Record<string, unknown>;
-        } catch {
-          return fail(400, "Invalid JSON");
-        }
+          if (!rawBody || !rawBody.trim()) {
+            console.log("[webhook] body vazio — ignorado com 200");
+            return ok({ ignored: true, reason: "empty body" });
+          }
 
-        // Debug completo do payload recebido (Evolution v2)
-        console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
+          let payload: Record<string, unknown> = {};
+          try {
+            payload = JSON.parse(rawBody) as Record<string, unknown>;
+          } catch {
+            console.warn("[webhook] JSON inválido — ignorado com 200");
+            return ok({ ignored: true, reason: "invalid json" });
+          }
 
-        const event = (payload.event as string) ?? "unknown";
-        const instance =
-          (payload.instance as string) ??
-          (payload.instanceName as string) ??
-          "";
-        // Evolution v2 envia o ID da instância no payload. Pode vir em vários campos.
-        const instanceObj = (payload.instance && typeof payload.instance === "object"
-          ? (payload.instance as Record<string, unknown>)
-          : null);
-        const instanceId =
-          (payload.instanceId as string) ??
-          (payload.instance_id as string) ??
-          (instanceObj?.instanceId as string) ??
-          (instanceObj?.id as string) ??
-          "";
-        const data = payload.data as EvolutionMessageData | undefined;
+          // 2. Validação opcional de secret (não bloqueia se erro de DB)
+          try {
+            const { data: settings } = await supabaseAdmin
+              .from("integration_settings")
+              .select("webhook_secret")
+              .limit(1)
+              .maybeSingle();
 
-        console.log(
-          `[webhook] event=${event} instance=${instance} instanceId=${instanceId} hasData=${!!data}`
-        );
+            const expectedSecret = settings?.webhook_secret;
+            if (expectedSecret) {
+              const provided =
+                request.headers.get("x-webhook-secret") ??
+                request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+              if (provided !== expectedSecret) {
+                console.warn("[webhook] secret inválido");
+                return fail(401, "Invalid webhook secret");
+              }
+            }
+          } catch (err) {
+            console.error("[webhook] secret check error:", err);
+          }
 
-        // ID OFICIAL da nossa instância na Evolution.
-        const ALLOWED_INSTANCE_ID = "148820d1-cd48-46f4-bbf4-3de46c1e6d81";
-        const ALLOWED_INSTANCE_NAME = "tistecnociateste";
+          console.log("[webhook] payload recebido:", JSON.stringify(payload).slice(0, 800));
 
-        // Filtro: aceita se instanceId bate (preferencial) OU, na ausência dele,
-        // se o nome da instância bater.
-        const matchesId = instanceId && instanceId === ALLOWED_INSTANCE_ID;
-        const matchesName = !instanceId && instance === ALLOWED_INSTANCE_NAME;
-        if (!matchesId && !matchesName) {
+          const event = (payload.event as string) ?? "unknown";
+          const instance =
+            (typeof payload.instance === "string" ? (payload.instance as string) : "") ||
+            (payload.instanceName as string) ||
+            "";
+          const instanceObj =
+            payload.instance && typeof payload.instance === "object"
+              ? (payload.instance as Record<string, unknown>)
+              : null;
+          const instanceId =
+            (payload.instanceId as string) ??
+            (payload.instance_id as string) ??
+            (instanceObj?.instanceId as string) ??
+            (instanceObj?.id as string) ??
+            "";
+          const data = payload.data as EvolutionMessageData | undefined;
+
           console.log(
-            `[webhook] instância ignorada: name="${instance}" id="${instanceId}" (esperado id=${ALLOWED_INSTANCE_ID})`
+            `[webhook] event=${event} instance=${instance} instanceId=${instanceId} hasData=${!!data}`
           );
-          return ok({ event, instance, instanceId, ignored: true, reason: "instance not allowed" });
-        }
 
-        try {
+          // 3. Filtro de instância (id preferencial, fallback por nome)
+          const matchesId = instanceId && instanceId === ALLOWED_INSTANCE_ID;
+          const matchesName = !instanceId && instance === ALLOWED_INSTANCE_NAME;
+          if (!matchesId && !matchesName) {
+            console.log(
+              `[webhook] instância ignorada: name="${instance}" id="${instanceId}"`
+            );
+            return ok({ event, instance, instanceId, ignored: true, reason: "instance not allowed" });
+          }
+
+          // 4. Processa apenas eventos de mensagem
           const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
           if (
-            (normalizedEvent === "messages.upsert" ||
-              normalizedEvent === "send.message") &&
+            (normalizedEvent === "messages.upsert" || normalizedEvent === "send.message") &&
             data
           ) {
             const result = await processMessageUpsert(ALLOWED_INSTANCE_NAME, data);
@@ -340,12 +359,12 @@ export const Route = createFileRoute("/api/public/webhook")({
             return ok({ event, instance: ALLOWED_INSTANCE_NAME, instanceId, ...result });
           }
 
-          // Eventos não tratados ainda — responde OK para evitar retry
-          console.log(`[webhook] event ignored: ${event}`);
+          console.log(`[webhook] event ignorado: ${event}`);
           return ok({ event, instance, ignored: true });
         } catch (err) {
-          console.error("[webhook] handler error:", err);
-          return fail(500, err instanceof Error ? err.message : "Erro interno");
+          // Sempre 200 para evitar retry agressivo da Evolution
+          console.error("[webhook] erro inesperado:", err);
+          return ok({ ignored: true, error: err instanceof Error ? err.message : String(err) });
         }
       },
     },
