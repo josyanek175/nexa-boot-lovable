@@ -245,10 +245,17 @@ export async function sendTextMessage(
 
   const number = formatWhatsappJid(remoteJid);
 
-  // Endpoint obrigatório: {EVOLUTION_API_URL}/message/sendText/{instance}
+  // Endpoint obrigatório (Evolution v2):
+  // POST {EVOLUTION_API_URL}/message/sendText/{instance}
+  // Body: { number, textMessage: { text } }  — também envia `text` no topo
+  // por compatibilidade com algumas versões/forks da Evolution v2.
   return evolutionFetch(`/message/sendText/${instance}`, {
     method: "POST",
-    body: JSON.stringify({ number, text }),
+    body: JSON.stringify({
+      number,
+      text,
+      textMessage: { text },
+    }),
   });
 }
 
