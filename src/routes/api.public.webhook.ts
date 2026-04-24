@@ -70,6 +70,14 @@ function extractText(data?: EvolutionMessageData): string {
   return "";
 }
 
+// Mapeamento canônico de instância -> UUID do whatsapp_numbers.
+// Variantes da mesma instância (typos vindos da Evolution) consolidam no mesmo UUID.
+const INSTANCE_UUID_MAP: Record<string, string> = {
+  tistecnolociateste: "8fba71fa-e84f-4ba9-beb5-95c206f7320f",
+  tistecnociateste: "8fba71fa-e84f-4ba9-beb5-95c206f7320f",
+};
+const ALLOWED_INSTANCES = Object.keys(INSTANCE_UUID_MAP);
+
 async function processMessageUpsert(
   instanceName: string,
   data: EvolutionMessageData
