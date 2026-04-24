@@ -2,16 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendTextMessage } from "./evolution-api.server";
 
-// Normaliza número BR: remove caracteres não numéricos e o 9º dígito extra
-// quando o número está no formato 55 + DDD + 9 + 8 dígitos (13 chars).
-function normalizePhone(input: string): string {
-  const digits = (input ?? "").replace(/\D/g, "");
-  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
-    return digits.slice(0, 4) + digits.slice(5);
-  }
-  return digits;
-}
-
 // ── Load WhatsApp numbers from DB ──
 export const loadWhatsappNumbers = createServerFn({ method: "GET" }).handler(async () => {
   const { data, error } = await supabaseAdmin
@@ -173,7 +163,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     try {
-      const phoneDigits = normalizePhone(data.contactPhone);
+      const phoneDigits = data.contactPhone.replace(/\D/g, "");
       // Evolution aceita só o número (sem @s.whatsapp.net)
       await sendTextMessage(data.instanceName, phoneDigits, data.conteudo);
       return { message: msg, error: null };
@@ -193,12 +183,11 @@ export const findOrCreateConversation = createServerFn({ method: "POST" })
     (data: { contactPhone: string; contactName: string; whatsappNumberId: string }) => data
   )
   .handler(async ({ data }) => {
-    const phone = normalizePhone(data.contactPhone);
     // Find or create contact
     let { data: contact } = await supabaseAdmin
       .from("contacts")
       .select("id")
-      .eq("telefone", phone)
+      .eq("telefone", data.contactPhone.replace(/\D/g, ""))
       .single();
 
     if (!contact) {
@@ -206,7 +195,7 @@ export const findOrCreateConversation = createServerFn({ method: "POST" })
         .from("contacts")
         .insert({
           nome: data.contactName,
-          telefone: phone,
+          telefone: data.contactPhone.replace(/\D/g, ""),
         })
         .select("id")
         .single();
@@ -251,7 +240,7 @@ export const processIncomingMessage = createServerFn({ method: "POST" })
     }) => data
   )
   .handler(async ({ data }) => {
-    const phone = normalizePhone(data.contactPhone.replace(/@.*/, ""));
+    const phone = data.contactPhone.replace(/\D/g, "").replace(/@.*/, "");
 
     // Find or create contact
     let { data: contact } = await supabaseAdmin

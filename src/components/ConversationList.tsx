@@ -62,19 +62,14 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
   const [tab, setTab] = useState<string>("all");
   const [newOpen, setNewOpen] = useState(false);
 
-  const uniqueConversations = conversations.filter((conv, index, self) => {
-    const uniqueKey = `${conv.id}-${conv.whatsapp_number_id}`;
-    return index === self.findIndex((t) => `${t.id}-${t.whatsapp_number_id}` === uniqueKey);
-  });
-
   const counts = {
-    all: uniqueConversations.length,
-    pendente: uniqueConversations.filter((c) => c.status_atendimento === "pendente").length,
-    em_atendimento: uniqueConversations.filter((c) => c.status_atendimento === "em_atendimento").length,
-    finalizado: uniqueConversations.filter((c) => c.status_atendimento === "finalizado").length,
+    all: conversations.length,
+    pendente: conversations.filter((c) => c.status_atendimento === "pendente").length,
+    em_atendimento: conversations.filter((c) => c.status_atendimento === "em_atendimento").length,
+    finalizado: conversations.filter((c) => c.status_atendimento === "finalizado").length,
   };
 
-  const filtered = uniqueConversations.filter((c) => {
+  const filtered = conversations.filter((c) => {
     const name = c.contacts?.nome ?? "";
     const phone = c.contacts?.telefone ?? "";
     const matchSearch =

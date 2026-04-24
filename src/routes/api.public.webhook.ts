@@ -1,15 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-// Normalização de telefone inline (sem dependências externas para estabilidade)
-function normalizePhone(input: string): string {
-  const digits = (input ?? "").replace(/\D/g, "");
-  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
-    return digits.slice(0, 4) + digits.slice(5);
-  }
-  return digits;
-}
-
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
@@ -89,23 +80,28 @@ async function processMessageUpsert(
   const externalId = data.key?.id;
   const isFromMe = data.key?.fromMe === true;
 
-  if (!remoteJid) {
-    console.log("[webhook] sem remoteJid → tratado como evento de sistema");
-    return { persisted: false, reason: "missing remoteJid" };
-  }
-  if (!text) {
-    console.log("[webhook] sem texto/message → tratado como evento de sistema");
-    return { persisted: false, reason: "no text content" };
-  }
+  if (!remoteJid) return { persisted: false, reason: "missing remoteJid" };
+  if (!text) return { persisted: false, reason: "no text content" };
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
 
-  // Dedup global por external_id (movemos a verificação por instância
-  // logo depois de resolver wppId para ser ainda mais precisa).
+  // Dedup: se já existe mensagem com esse external_id, ignora
+  if (externalId) {
+    const { data: existing } = await supabaseAdmin
+      .from("messages")
+      .select("id")
+      .eq("external_id", externalId)
+      .maybeSingle();
+    if (existing) {
+      console.log(`[webhook] mensagem duplicada ignorada: external_id=${externalId}`);
+      return { persisted: false, reason: "duplicate external_id" };
+    }
+  }
 
-  // Ignora mensagens fromMe para evitar eco do próprio envio no chat.
-  // A mensagem enviada pelo usuário já entra no banco pelo fluxo de envio manual.
+  // Ignora mensagens fromMe (já gravadas localmente pelo optimistic UI no envio).
+  // Se não houver external_id não temos como confirmar duplicidade — mesmo assim ignoramos
+  // para evitar eco do próprio envio.
   if (isFromMe) {
-    console.log(`[webhook] fromMe ignorado para evitar duplicidade: external_id=${externalId ?? "n/a"}`);
+    console.log(`[webhook] fromMe ignorado (já salvo localmente): external_id=${externalId ?? "n/a"}`);
     return { persisted: false, reason: "fromMe ignored" };
   }
 
@@ -143,21 +139,8 @@ async function processMessageUpsert(
     );
   }
 
-  // Dedup PER-INSTANCE: se já existe mensagem com esse external_id PARA esta instância, ignora.
-  if (externalId) {
-    const { data: existing } = await supabaseAdmin
-      .from("messages")
-      .select("id")
-      .eq("external_id", externalId)
-      .eq("whatsapp_number_id", wppId)
-      .maybeSingle();
-    if (existing) {
-      console.log(`[webhook] duplicada ignorada: external_id=${externalId} instance=${instanceName}`);
-      return { persisted: false, reason: "duplicate external_id for instance" };
-    }
-  }
-
-  const phone = normalizePhone(remoteJid.replace(/@.*/, ""));
+  // 2. Resolver contato (telefone limpo)
+  const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
   let { data: contact } = await supabaseAdmin
@@ -254,87 +237,75 @@ export const Route = createFileRoute("/api/public/webhook")({
       POST: async ({ request }) => {
         const startedAt = Date.now();
 
-        // Alerta de secrets faltando (não bloqueia — só loga)
-        if (!process.env.EVOLUTION_API_URL) {
-          console.warn("[webhook] ⚠️ EVOLUTION_API_URL ausente nos Secrets");
-        }
-        if (!process.env.EVOLUTION_API_KEY) {
-          console.warn("[webhook] ⚠️ EVOLUTION_API_KEY ausente nos Secrets");
-        }
-
-        // BLINDAGEM GLOBAL: qualquer erro inesperado loga e retorna 200,
-        // para que a Evolution não pare de enviar eventos.
+        // Validação opcional do secret
         try {
-          // Validação opcional do secret
-          try {
-            const { data: settings } = await supabaseAdmin
-              .from("integration_settings")
-              .select("webhook_secret")
-              .limit(1)
-              .maybeSingle();
+          const { data: settings } = await supabaseAdmin
+            .from("integration_settings")
+            .select("webhook_secret")
+            .limit(1)
+            .maybeSingle();
 
-            const expectedSecret = settings?.webhook_secret;
-            if (expectedSecret) {
-              const provided =
-                request.headers.get("x-webhook-secret") ??
-                request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-              if (provided !== expectedSecret) {
-                console.warn("[webhook] invalid secret");
-                return fail(401, "Invalid webhook secret");
-              }
+          const expectedSecret = settings?.webhook_secret;
+          if (expectedSecret) {
+            const provided =
+              request.headers.get("x-webhook-secret") ??
+              request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+            if (provided !== expectedSecret) {
+              console.warn("[webhook] invalid secret");
+              return fail(401, "Invalid webhook secret");
             }
-          } catch (err) {
-            console.error("[webhook] secret check error (ignorado):", err);
           }
+        } catch (err) {
+          console.error("[webhook] secret check error:", err);
+        }
 
-          let payload: Record<string, unknown> = {};
-          try {
-            const raw = await request.text();
-            payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-          } catch (err) {
-            console.error("[webhook] JSON inválido (ignorado):", err);
-            return ok({ ignored: true, reason: "invalid json" });
-          }
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = (await request.json()) as Record<string, unknown>;
+        } catch {
+          return fail(400, "Invalid JSON");
+        }
 
-          // Debug completo do payload recebido (Evolution v2)
-          console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
+        // Debug completo do payload recebido (Evolution v2)
+        console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
 
-          const event = (payload.event as string) ?? "unknown";
-          const instance =
-            (payload.instance as string) ??
-            (payload.instanceName as string) ??
-            "";
-          const data = payload.data as EvolutionMessageData | undefined;
+        const event = (payload.event as string) ?? "unknown";
+        const instance =
+          (payload.instance as string) ??
+          (payload.instanceName as string) ??
+          "";
+        const data = payload.data as EvolutionMessageData | undefined;
 
-          console.log(
-            `[webhook] event=${event} instance=${instance} hasData=${!!data}`
-          );
+        console.log(
+          `[webhook] event=${event} instance=${instance} hasData=${!!data}`
+        );
 
-          // Eventos sem data ou sem instância → tratados como evento de sistema
-          if (!data || !instance) {
-            console.log(`[webhook] evento de sistema ignorado: event=${event}`);
-            return ok({ event, instance, ignored: true, reason: "system event" });
-          }
+        // Filtro de instância: processa APENAS a instância configurada
+        const ALLOWED_INSTANCE = "tistecnociateste";
+        if (instance && instance !== ALLOWED_INSTANCE) {
+          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
+          return ok({ event, instance, ignored: true, reason: "instance not allowed" });
+        }
 
+        try {
           const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
           if (
-            normalizedEvent === "messages.upsert" ||
-            normalizedEvent === "send.message"
+            (normalizedEvent === "messages.upsert" ||
+              normalizedEvent === "send.message") &&
+            data &&
+            instance
           ) {
             const result = await processMessageUpsert(instance, data);
-            console.log(`[webhook] processado em ${Date.now() - startedAt}ms`, result);
+            console.log(`[webhook] processed in ${Date.now() - startedAt}ms`, result);
             return ok({ event, instance, ...result });
           }
 
-          console.log(`[webhook] evento não tratado: ${event}`);
+          // Eventos não tratados ainda — responde OK para evitar retry
+          console.log(`[webhook] event ignored: ${event}`);
           return ok({ event, instance, ignored: true });
         } catch (err) {
-          // Blindagem final: NUNCA retornar 500 para a Evolution
-          console.error("[webhook] erro global capturado (respondendo 200):", err);
-          return ok({
-            ignored: true,
-            error: err instanceof Error ? err.message : String(err),
-          });
+          console.error("[webhook] handler error:", err);
+          return fail(500, err instanceof Error ? err.message : "Erro interno");
         }
       },
     },

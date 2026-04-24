@@ -31,23 +31,27 @@ function ConversationsPage() {
   const selectedIdRef = useRef<string | null>(null);
 
   const dedupeMessages = useCallback((items: any[]) => {
-    return items
-      .filter((msg, index, self) => {
-        const messageKey = msg.message_id ?? msg.id;
-        return (
-          index ===
-          self.findIndex((candidate) => (candidate.message_id ?? candidate.id) === messageKey)
-        );
-      })
-      .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
-  }, []);
+    const byId = new Map<string, any>();
+    const byExternalId = new Map<string, string>();
 
-  const upsertRealtimeMessage = useCallback(
-    (incoming: any) => {
-      setMessages((prev) => dedupeMessages([...prev, incoming]));
-    },
-    [dedupeMessages]
-  );
+    for (const item of items) {
+      if (item.external_id) {
+        const existingId = byExternalId.get(item.external_id);
+        if (existingId && byId.has(existingId)) {
+          byId.set(existingId, { ...byId.get(existingId), ...item, id: existingId });
+          continue;
+        }
+
+        byExternalId.set(item.external_id, item.id);
+      }
+
+      byId.set(item.id, item);
+    }
+
+    return Array.from(byId.values()).sort(
+      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+    );
+  }, []);
 
   const fetchConversations = useCallback(async () => {
     setLoadingConvs(true);
@@ -102,11 +106,7 @@ function ConversationsPage() {
           };
         })
       );
-      // Deduplicação defensiva por id antes de salvar no estado
-      const uniqueEnriched = Array.from(
-        new Map(enriched.map((c: any) => [c.id, c])).values()
-      );
-      setConversations(uniqueEnriched);
+      setConversations(enriched);
     } else {
       setConversations([]);
     }
@@ -155,14 +155,6 @@ function ConversationsPage() {
     fetchConversations();
   }, [fetchConversations]);
 
-  // Limpa caches locais ao trocar de número (evita exibir conversas antigas)
-  useEffect(() => {
-    setConversations([]);
-    setMessages([]);
-    setSelectedId(null);
-    messagesRef.current = [];
-  }, [activeNumberId]);
-
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -179,15 +171,23 @@ function ConversationsPage() {
     }
   }, [selectedId, fetchMessages]);
 
-  // Realtime: lista de conversas
+  // Realtime: messages + conversations
   useEffect(() => {
     const channel = supabase
-      .channel("chat-conversations-realtime")
+      .channel("chat-realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
-          console.log("Nova mensagem recebida:", payload);
+          const newMsg = payload.new as any;
+          const currentSelectedId = selectedIdRef.current;
+          const alreadyExists = messagesRef.current.some(
+            (msg) => msg.id === newMsg.id || (!!newMsg.external_id && msg.external_id === newMsg.external_id)
+          );
+
+          if (currentSelectedId && newMsg.conversation_id === currentSelectedId && !alreadyExists) {
+            setMessages((prev) => dedupeMessages([...prev, newMsg]));
+          }
           fetchConversations();
         }
       )
@@ -203,52 +203,7 @@ function ConversationsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchConversations]);
-
-  // Realtime: mensagens da conversa aberta, sem filtro rígido por instância
-  useEffect(() => {
-    if (!selectedId) return;
-
-    const channel = supabase
-      .channel(`chat-messages-${selectedId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${selectedId}`,
-        },
-        async (payload) => {
-          console.log("Mensagem da conversa aberta recebida em tempo real:", payload);
-          const newMsg = payload.new as any;
-
-          if (newMsg.user_id) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("nome")
-              .eq("user_id", newMsg.user_id)
-              .maybeSingle();
-
-            upsertRealtimeMessage({
-              ...newMsg,
-              profiles: profile ? { nome: profile.nome } : null,
-            });
-            return;
-          }
-
-          upsertRealtimeMessage({
-            ...newMsg,
-            profiles: null,
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedId, upsertRealtimeMessage]);
+  }, [dedupeMessages, fetchConversations]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId);
 

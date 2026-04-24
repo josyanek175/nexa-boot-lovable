@@ -30,7 +30,6 @@ import { useActiveNumber } from "@/hooks/use-active-number";
 
 interface MessageItem {
   id: string;
-  message_id?: string | null;
   external_id?: string | null;
   conteudo: string;
   tipo: string;
@@ -121,19 +120,13 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
-  const uniqueMessages = messages
-    .filter((msg, index, self) => {
-      const messageKey = msg.message_id ?? msg.id;
-      return (
-        index === self.findIndex((t) => (t.message_id ?? t.id) === messageKey)
-      );
-    })
-    .slice()
-    .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
+  const allMessages = Array.from(new Map(messages.map((msg) => [msg.id, msg])).values()).sort(
+    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [uniqueMessages.length]);
+  }, [allMessages.length]);
 
   const numberData = numbers.find((n) => n.id === conversation.whatsapp_number_id);
   const contactName = conversation.contacts?.nome ?? "Desconhecido";
@@ -379,7 +372,7 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-pattern custom-scrollbar px-4 py-4">
-        {uniqueMessages.length === 0 ? (
+        {allMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="rounded-lg bg-card/80 px-4 py-2 text-xs text-muted-foreground shadow-sm">
               Nenhuma mensagem ainda. Envie a primeira!
@@ -388,7 +381,7 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
         ) : (
           (() => {
             let lastDate = "";
-            return uniqueMessages.map((msg) => {
+            return allMessages.map((msg) => {
               const d = new Date(msg.data_envio);
               const dateLabel = d.toLocaleDateString("pt-BR", {
                 day: "2-digit",
