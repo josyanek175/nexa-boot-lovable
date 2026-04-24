@@ -89,8 +89,14 @@ async function processMessageUpsert(
   const externalId = data.key?.id;
   const isFromMe = data.key?.fromMe === true;
 
-  if (!remoteJid) return { persisted: false, reason: "missing remoteJid" };
-  if (!text) return { persisted: false, reason: "no text content" };
+  if (!remoteJid) {
+    console.log("[webhook] sem remoteJid → tratado como evento de sistema");
+    return { persisted: false, reason: "missing remoteJid" };
+  }
+  if (!text) {
+    console.log("[webhook] sem texto/message → tratado como evento de sistema");
+    return { persisted: false, reason: "no text content" };
+  }
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
 
   // Dedup global por external_id (movemos a verificação por instância
@@ -248,70 +254,87 @@ export const Route = createFileRoute("/api/public/webhook")({
       POST: async ({ request }) => {
         const startedAt = Date.now();
 
-        // Validação opcional do secret
-        try {
-          const { data: settings } = await supabaseAdmin
-            .from("integration_settings")
-            .select("webhook_secret")
-            .limit(1)
-            .maybeSingle();
+        // Alerta de secrets faltando (não bloqueia — só loga)
+        if (!process.env.EVOLUTION_API_URL) {
+          console.warn("[webhook] ⚠️ EVOLUTION_API_URL ausente nos Secrets");
+        }
+        if (!process.env.EVOLUTION_API_KEY) {
+          console.warn("[webhook] ⚠️ EVOLUTION_API_KEY ausente nos Secrets");
+        }
 
-          const expectedSecret = settings?.webhook_secret;
-          if (expectedSecret) {
-            const provided =
-              request.headers.get("x-webhook-secret") ??
-              request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-            if (provided !== expectedSecret) {
-              console.warn("[webhook] invalid secret");
-              return fail(401, "Invalid webhook secret");
+        // BLINDAGEM GLOBAL: qualquer erro inesperado loga e retorna 200,
+        // para que a Evolution não pare de enviar eventos.
+        try {
+          // Validação opcional do secret
+          try {
+            const { data: settings } = await supabaseAdmin
+              .from("integration_settings")
+              .select("webhook_secret")
+              .limit(1)
+              .maybeSingle();
+
+            const expectedSecret = settings?.webhook_secret;
+            if (expectedSecret) {
+              const provided =
+                request.headers.get("x-webhook-secret") ??
+                request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+              if (provided !== expectedSecret) {
+                console.warn("[webhook] invalid secret");
+                return fail(401, "Invalid webhook secret");
+              }
             }
+          } catch (err) {
+            console.error("[webhook] secret check error (ignorado):", err);
           }
-        } catch (err) {
-          console.error("[webhook] secret check error:", err);
-        }
 
-        let payload: Record<string, unknown> = {};
-        try {
-          payload = (await request.json()) as Record<string, unknown>;
-        } catch {
-          return fail(400, "Invalid JSON");
-        }
+          let payload: Record<string, unknown> = {};
+          try {
+            const raw = await request.text();
+            payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+          } catch (err) {
+            console.error("[webhook] JSON inválido (ignorado):", err);
+            return ok({ ignored: true, reason: "invalid json" });
+          }
 
-        // Debug completo do payload recebido (Evolution v2)
-        console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
+          // Debug completo do payload recebido (Evolution v2)
+          console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
 
-        const event = (payload.event as string) ?? "unknown";
-        const instance =
-          (payload.instance as string) ??
-          (payload.instanceName as string) ??
-          "";
-        const data = payload.data as EvolutionMessageData | undefined;
+          const event = (payload.event as string) ?? "unknown";
+          const instance =
+            (payload.instance as string) ??
+            (payload.instanceName as string) ??
+            "";
+          const data = payload.data as EvolutionMessageData | undefined;
 
-        console.log(
-          `[webhook] event=${event} instance=${instance} hasData=${!!data}`
-        );
+          console.log(
+            `[webhook] event=${event} instance=${instance} hasData=${!!data}`
+          );
 
-        // Multi-instância: aceita qualquer instância vinda no payload.
+          // Eventos sem data ou sem instância → tratados como evento de sistema
+          if (!data || !instance) {
+            console.log(`[webhook] evento de sistema ignorado: event=${event}`);
+            return ok({ event, instance, ignored: true, reason: "system event" });
+          }
 
-        try {
           const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
           if (
-            (normalizedEvent === "messages.upsert" ||
-              normalizedEvent === "send.message") &&
-            data &&
-            instance
+            normalizedEvent === "messages.upsert" ||
+            normalizedEvent === "send.message"
           ) {
             const result = await processMessageUpsert(instance, data);
-            console.log(`[webhook] processed in ${Date.now() - startedAt}ms`, result);
+            console.log(`[webhook] processado em ${Date.now() - startedAt}ms`, result);
             return ok({ event, instance, ...result });
           }
 
-          // Eventos não tratados ainda — responde OK para evitar retry
-          console.log(`[webhook] event ignored: ${event}`);
+          console.log(`[webhook] evento não tratado: ${event}`);
           return ok({ event, instance, ignored: true });
         } catch (err) {
-          console.error("[webhook] handler error:", err);
-          return fail(500, err instanceof Error ? err.message : "Erro interno");
+          // Blindagem final: NUNCA retornar 500 para a Evolution
+          console.error("[webhook] erro global capturado (respondendo 200):", err);
+          return ok({
+            ignored: true,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     },
