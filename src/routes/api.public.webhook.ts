@@ -288,12 +288,7 @@ export const Route = createFileRoute("/api/public/webhook")({
           `[webhook] event=${event} instance=${instance} hasData=${!!data}`
         );
 
-        // Filtro de instância: processa APENAS a instância configurada
-        const ALLOWED_INSTANCE = "tistecnociateste";
-        if (instance && instance !== ALLOWED_INSTANCE) {
-          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
-          return ok({ event, instance, ignored: true, reason: "instance not allowed" });
-        }
+        // Multi-instância: aceita qualquer instância vinda no payload.
 
         try {
           const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
