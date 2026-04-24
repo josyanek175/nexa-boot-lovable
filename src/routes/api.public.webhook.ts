@@ -139,17 +139,35 @@ async function processMessageUpsert(
     );
   }
 
-  // 2. Resolver contato (telefone limpo)
+  // 2. Resolver contato (telefone limpo + variantes BR com/sem 9º dígito)
   const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
-  let { data: contact } = await supabaseAdmin
+  console.log(`[webhook] Tentando processar mensagem de: ${phone} (pushName=${data.pushName ?? "n/a"})`);
+
+  // Gera variantes BR (com e sem 9º dígito) para evitar contato duplicado
+  const phoneVariants: string[] = [phone];
+  if (phone.startsWith("55") && phone.length >= 12) {
+    const ddd = phone.slice(2, 4);
+    const rest = phone.slice(4);
+    if (rest.length === 9 && rest.startsWith("9")) {
+      phoneVariants.push(`55${ddd}${rest.slice(1)}`);
+    } else if (rest.length === 8) {
+      phoneVariants.push(`55${ddd}9${rest}`);
+    }
+  }
+
+  // Busca contato existente em qualquer variante
+  const { data: existingContacts } = await supabaseAdmin
     .from("contacts")
-    .select("id")
-    .eq("telefone", phone)
-    .maybeSingle();
+    .select("id, telefone")
+    .in("telefone", phoneVariants);
+
+  let contact = existingContacts && existingContacts.length > 0 ? existingContacts[0] : null;
 
   if (!contact) {
+    // Auto-criação imediata usando pushName + número internacional
+    console.log(`[webhook] criando contato novo: telefone=${phone} nome=${data.pushName ?? phone}`);
     const { data: created, error: contactErr } = await supabaseAdmin
       .from("contacts")
       .insert({
@@ -158,7 +176,7 @@ async function processMessageUpsert(
         ultima_interacao: new Date().toISOString(),
         is_temporary: !data.pushName,
       })
-      .select("id")
+      .select("id, telefone")
       .single();
     if (contactErr || !created) {
       console.error("[webhook] contact insert error:", contactErr);
@@ -166,10 +184,16 @@ async function processMessageUpsert(
     }
     contact = created;
   } else {
-    await supabaseAdmin
-      .from("contacts")
-      .update({ ultima_interacao: new Date().toISOString() })
-      .eq("id", contact.id);
+    console.log(`[webhook] contato encontrado: id=${contact.id} telefone=${contact.telefone}`);
+    const updates: Record<string, unknown> = {
+      ultima_interacao: new Date().toISOString(),
+    };
+    // Atualiza nome se o atual era temporário e agora veio pushName
+    if (data.pushName) {
+      updates.nome = data.pushName;
+      updates.is_temporary = false;
+    }
+    await supabaseAdmin.from("contacts").update(updates).eq("id", contact.id);
   }
 
   // 3. Conversa
