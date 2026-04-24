@@ -13,7 +13,15 @@ import {
   statusColors,
   parseCSVContacts,
 } from "@/lib/crm-utils";
-import { normalizePhone } from "@/lib/phone-utils";
+
+// Normalização inline (evita dependência externa instável)
+function normalizePhone(input: string): string {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}
 
 export const Route = createFileRoute("/contacts")({
   component: ContactsPage,
