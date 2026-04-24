@@ -70,6 +70,14 @@ function extractText(data?: EvolutionMessageData): string {
   return "";
 }
 
+// Mapeamento canônico de instância -> UUID do whatsapp_numbers.
+// Variantes da mesma instância (typos vindos da Evolution) consolidam no mesmo UUID.
+const INSTANCE_UUID_MAP: Record<string, string> = {
+  tistecnolociateste: "8fba71fa-e84f-4ba9-beb5-95c206f7320f",
+  tistecnociateste: "8fba71fa-e84f-4ba9-beb5-95c206f7320f",
+};
+const ALLOWED_INSTANCES = Object.keys(INSTANCE_UUID_MAP);
+
 async function processMessageUpsert(
   instanceName: string,
   data: EvolutionMessageData
@@ -105,39 +113,13 @@ async function processMessageUpsert(
     return { persisted: false, reason: "fromMe ignored" };
   }
 
-  // 1. Resolver instância
-  const { data: wpp, error: wppErr } = await supabaseAdmin
-    .from("whatsapp_numbers")
-    .select("id")
-    .eq("instance_name", instanceName)
-    .maybeSingle();
-
-  if (wppErr) {
-    console.error("[webhook] whatsapp_numbers lookup error:", wppErr);
-    return { persisted: false, reason: `db error: ${wppErr.message}` };
-  }
-
-  // Auto-cria registro de número se não existir (suporte multi-instância)
-  let wppId = wpp?.id;
+  // 1. Resolver instância — força mapeamento canônico para o UUID configurado.
+  const wppId = INSTANCE_UUID_MAP[instanceName];
   if (!wppId) {
-    const { data: created, error: createErr } = await supabaseAdmin
-      .from("whatsapp_numbers")
-      .insert({
-        instance_name: instanceName,
-        nome: instanceName,
-        status: "conectado",
-      })
-      .select("id")
-      .single();
-    if (createErr || !created) {
-      console.error("[webhook] failed to auto-create whatsapp_number:", createErr);
-      return { persisted: false, reason: "could not create whatsapp_number" };
-    }
-    wppId = created.id;
-    console.log(
-      `[webhook] auto-registered new whatsapp instance "${instanceName}" (id=${wppId}). Future messages from this instance will be accepted.`
-    );
+    console.warn(`[WEBHOOK] instância desconhecida ignorada: "${instanceName}"`);
+    return { persisted: false, reason: "instance not mapped" };
   }
+  console.log(`[WEBHOOK] Recebido da instância ${instanceName}, salvando como UUID ${wppId}`);
 
   // 2. Resolver contato (telefone limpo)
   const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
@@ -196,23 +178,27 @@ async function processMessageUpsert(
     conv = createdConv;
   }
 
-  // 4. Mensagem
-  const { error: msgErr } = await supabaseAdmin.from("messages").insert({
-    conversation_id: conv.id,
-    whatsapp_number_id: wppId,
-    conteudo: text,
-    tipo: isFromMe ? "saida" : "entrada",
-    external_id: externalId ?? null,
-  });
+  // 4. Mensagem — try/catch para garantir que erro 23505 (duplicidade) não trave o processo
+  try {
+    const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+      conversation_id: conv.id,
+      whatsapp_number_id: wppId,
+      conteudo: text,
+      tipo: isFromMe ? "saida" : "entrada",
+      external_id: externalId ?? null,
+    });
 
-  if (msgErr) {
-    // 23505 = unique violation → tratada como duplicata silenciosa
-    if ((msgErr as { code?: string }).code === "23505") {
-      console.log(`[webhook] unique violation ignorada: external_id=${externalId}`);
-      return { persisted: false, reason: "duplicate (unique constraint)" };
+    if (msgErr) {
+      if ((msgErr as { code?: string }).code === "23505") {
+        console.log(`[WEBHOOK] duplicidade ignorada (23505): external_id=${externalId}`);
+        return { persisted: false, reason: "duplicate (unique constraint)" };
+      }
+      console.error("[WEBHOOK] message insert error:", msgErr);
+      return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
     }
-    console.error("[webhook] message insert error:", msgErr);
-    return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
+  } catch (err) {
+    console.error("[WEBHOOK] message insert exception:", err);
+    return { persisted: false, reason: "message insert exception" };
   }
 
   return { persisted: true };
@@ -281,9 +267,9 @@ export const Route = createFileRoute("/api/public/webhook")({
         );
 
         // Filtro de instância: processa APENAS a instância configurada
-        const ALLOWED_INSTANCE = "tistecnociateste";
-        if (instance && instance !== ALLOWED_INSTANCE) {
-          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
+        // Filtro de instância: aceita variantes mapeadas em INSTANCE_UUID_MAP
+        if (instance && !ALLOWED_INSTANCES.includes(instance)) {
+          console.log(`[WEBHOOK] instância ignorada: "${instance}" (permitidas: ${ALLOWED_INSTANCES.join(", ")})`);
           return ok({ event, instance, ignored: true, reason: "instance not allowed" });
         }
 
