@@ -226,14 +226,32 @@ function formatWhatsappJid(input: string): string {
   return `${digits}@s.whatsapp.net`;
 }
 
+// Gera variantes de número brasileiro com e sem o 9º dígito.
+// Brasil: 55 + DDD (2) + 9 (móvel) + 8 dígitos OU 55 + DDD + 8 dígitos.
+// Retorna [original, variante] para tentar fallback no envio.
+export function brPhoneVariants(input: string): string[] {
+  const digits = input.replace(/\D/g, "");
+  if (!digits.startsWith("55") || digits.length < 12) return [digits];
+  const ddd = digits.slice(2, 4);
+  const rest = digits.slice(4);
+  const variants = new Set<string>([digits]);
+  if (rest.length === 9 && rest.startsWith("9")) {
+    // tem 9 → gera versão sem o 9
+    variants.add(`55${ddd}${rest.slice(1)}`);
+  } else if (rest.length === 8) {
+    // não tem 9 → gera versão com o 9
+    variants.add(`55${ddd}9${rest}`);
+  }
+  return Array.from(variants);
+}
+
 export async function sendTextMessage(
   instanceName: string,
   remoteJid: string,
   text: string
 ) {
   // Secret EVOLUTION_INSTANCE_NAME tem prioridade absoluta sobre o nome
-  // recebido como argumento. Isso permite forçar uma única instância global
-  // mesmo quando há múltiplas cadastradas na Evolution API.
+  // recebido como argumento.
   const forcedInstance = (process.env.EVOLUTION_INSTANCE_NAME ?? "").trim();
   const instance = forcedInstance || instanceName;
 
@@ -243,20 +261,36 @@ export async function sendTextMessage(
     );
   }
 
-  const number = formatWhatsappJid(remoteJid);
+  // Se vem JID com sufixo (ex: @g.us, @s.whatsapp.net), envia como está sem fallback
+  if (remoteJid.includes("@")) {
+    const number = formatWhatsappJid(remoteJid);
+    return evolutionFetch(`/message/sendText/${instance}`, {
+      method: "POST",
+      body: JSON.stringify({ number, text, textMessage: { text } }),
+    });
+  }
 
-  // Endpoint obrigatório (Evolution v2):
-  // POST {EVOLUTION_API_URL}/message/sendText/{instance}
-  // Body: { number, textMessage: { text } }  — também envia `text` no topo
-  // por compatibilidade com algumas versões/forks da Evolution v2.
-  return evolutionFetch(`/message/sendText/${instance}`, {
-    method: "POST",
-    body: JSON.stringify({
-      number,
-      text,
-      textMessage: { text },
-    }),
-  });
+  const variants = brPhoneVariants(remoteJid);
+  let lastErr: unknown = null;
+  for (const variant of variants) {
+    const number = formatWhatsappJid(variant);
+    try {
+      console.log(`[evolution] tentando envio para ${number} (instance=${instance})`);
+      const result = await evolutionFetch(`/message/sendText/${instance}`, {
+        method: "POST",
+        body: JSON.stringify({ number, text, textMessage: { text } }),
+      });
+      console.log(`[evolution] envio OK para ${number}`);
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[evolution] envio falhou para ${number}:`, msg);
+      lastErr = err;
+      // só tenta a próxima variante se for erro 400 (número inválido)
+      if (!msg.includes("400")) throw err;
+    }
+  }
+  throw lastErr ?? new Error("Falha ao enviar mensagem em todas as variantes do número.");
 }
 
 export async function fetchMessages(
