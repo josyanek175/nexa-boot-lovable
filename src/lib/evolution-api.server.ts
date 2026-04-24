@@ -212,14 +212,43 @@ export async function reconnectInstance(instanceName: string) {
 }
 
 // ── Mensagens ──
+// Formata o número no padrão exigido pela Evolution API: "<digits>@s.whatsapp.net".
+// Aceita entradas como "5511999999999", "55 11 99999-9999" ou já no formato JID.
+function formatWhatsappJid(input: string): string {
+  if (!input) return input;
+  // Se já tem @, mantém o sufixo original (pode ser @g.us para grupos)
+  if (input.includes("@")) {
+    const [num, suffix] = input.split("@");
+    const digits = num.replace(/\D/g, "");
+    return `${digits}@${suffix}`;
+  }
+  const digits = input.replace(/\D/g, "");
+  return `${digits}@s.whatsapp.net`;
+}
+
 export async function sendTextMessage(
   instanceName: string,
   remoteJid: string,
   text: string
 ) {
-  return evolutionFetch(`/message/sendText/${instanceName}`, {
+  // Secret EVOLUTION_INSTANCE_NAME tem prioridade absoluta sobre o nome
+  // recebido como argumento. Isso permite forçar uma única instância global
+  // mesmo quando há múltiplas cadastradas na Evolution API.
+  const forcedInstance = (process.env.EVOLUTION_INSTANCE_NAME ?? "").trim();
+  const instance = forcedInstance || instanceName;
+
+  if (!instance) {
+    throw new Error(
+      "Instância da Evolution não definida. Configure o secret EVOLUTION_INSTANCE_NAME."
+    );
+  }
+
+  const number = formatWhatsappJid(remoteJid);
+
+  // Endpoint obrigatório: {EVOLUTION_API_URL}/message/sendText/{instance}
+  return evolutionFetch(`/message/sendText/${instance}`, {
     method: "POST",
-    body: JSON.stringify({ number: remoteJid, text }),
+    body: JSON.stringify({ number, text }),
   });
 }
 
