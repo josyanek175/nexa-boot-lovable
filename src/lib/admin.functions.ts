@@ -77,7 +77,7 @@ export const updateAgentProfile = createServerFn({ method: "POST" })
   .inputValidator((data: { userId: string; nome: string; status?: "ativo" | "inativo" }) => data)
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const update: Record<string, unknown> = { nome: data.nome };
+    const update: { nome: string; status?: "ativo" | "inativo" } = { nome: data.nome };
     if (data.status) update.status = data.status;
     const { error } = await supabaseAdmin
       .from("profiles")
