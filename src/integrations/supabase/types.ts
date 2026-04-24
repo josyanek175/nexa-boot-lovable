@@ -74,7 +74,7 @@ export type Database = {
           id: string
           last_customer_message_at: string | null
           status: Database["public"]["Enums"]["conversation_status"]
-          status_atendimento: Database["public"]["Enums"]["attendance_status"]
+          status_atendimento: string
           updated_at: string
           whatsapp_number_id: string
         }
@@ -89,7 +89,7 @@ export type Database = {
           id?: string
           last_customer_message_at?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
-          status_atendimento?: Database["public"]["Enums"]["attendance_status"]
+          status_atendimento?: string
           updated_at?: string
           whatsapp_number_id: string
         }
@@ -104,7 +104,7 @@ export type Database = {
           id?: string
           last_customer_message_at?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
-          status_atendimento?: Database["public"]["Enums"]["attendance_status"]
+          status_atendimento?: string
           updated_at?: string
           whatsapp_number_id?: string
         }
