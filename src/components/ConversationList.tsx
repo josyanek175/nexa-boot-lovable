@@ -62,10 +62,10 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
   const [tab, setTab] = useState<string>("all");
   const [newOpen, setNewOpen] = useState(false);
 
-  // Deduplicação defensiva: garante 1 conversa por id, mesmo se vier duplicada do estado/cache
-  const uniqueConversations = Array.from(
-    new Map(conversations.map((c) => [c.id, c])).values()
-  );
+  const uniqueConversations = conversations.filter((conv, index, self) => {
+    const contactNumber = conv.contacts?.telefone ?? conv.id;
+    return index === self.findIndex((t) => (t.contacts?.telefone ?? t.id) === contactNumber);
+  });
 
   const counts = {
     all: uniqueConversations.length,
