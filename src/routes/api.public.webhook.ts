@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { normalizePhone } from "@/lib/phone-utils";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
