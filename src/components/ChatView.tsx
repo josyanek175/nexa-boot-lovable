@@ -116,13 +116,29 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const [showTransfer, setShowTransfer] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
   const [attendants, setAttendants] = useState<Array<{ user_id: string; nome: string; email: string }>>([]);
+  const [optimistic, setOptimistic] = useState<MessageItem[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
+  // Limpa otimistas quando a conversa muda ou quando mensagens reais chegam
+  useEffect(() => {
+    setOptimistic((prev) =>
+      prev.filter((o) => !messages.some((m) => m.conteudo === o.conteudo && m.tipo === "saida"))
+    );
+  }, [messages]);
+
+  useEffect(() => {
+    setOptimistic([]);
+  }, [conversation.id]);
+
+  const allMessages = [...messages, ...optimistic].sort(
+    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+  );
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [allMessages.length]);
 
   const numberData = numbers.find((n) => n.id === conversation.whatsapp_number_id);
   const contactName = conversation.contacts?.nome ?? "Desconhecido";
@@ -137,23 +153,65 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const isTemporaryContact = !!conversation.contacts?.is_temporary;
 
   const handleSend = async () => {
-    if (!input.trim() || sending || !user || !numberData) return;
+    if (!input.trim() || sending || !user) return;
+    if (!conversation.whatsapp_number_id) {
+      toast.error("Conversa sem número WhatsApp vinculado.");
+      return;
+    }
+    if (!numberData) {
+      toast.error("Número WhatsApp não encontrado. Sincronize em 'Números'.");
+      return;
+    }
+    if (!numberData.instance_name) {
+      toast.error("Instância da Evolution API não configurada para este número.");
+      return;
+    }
+
+    const text = input.trim();
+    const tempId = `tmp-${Date.now()}`;
+    const optimisticMsg: MessageItem = {
+      id: tempId,
+      conteudo: text,
+      tipo: "saida",
+      data_envio: new Date().toISOString(),
+      user_id: user.id,
+      whatsapp_number_id: conversation.whatsapp_number_id,
+      profiles: null,
+      _status: "sending",
+    };
+    setOptimistic((prev) => [...prev, optimisticMsg]);
+    setInput("");
     setSending(true);
+
     try {
-      await sendChatMessage({
+      const res = await sendChatMessage({
         data: {
           conversationId: conversation.id,
           whatsappNumberId: conversation.whatsapp_number_id,
           userId: user.id,
-          conteudo: input.trim(),
+          conteudo: text,
           contactPhone,
           instanceName: numberData.instance_name,
         },
       });
-      setInput("");
+      if (res?.error) {
+        toast.error(res.error);
+        setOptimistic((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
+        );
+      } else {
+        setOptimistic((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m))
+        );
+      }
       onMessageSent();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Falha ao enviar mensagem.";
       console.error("Failed to send:", err);
+      toast.error(msg);
+      setOptimistic((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
+      );
     } finally {
       setSending(false);
     }
