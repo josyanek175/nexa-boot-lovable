@@ -119,6 +119,7 @@ async function processMessageUpsert(
         nome: data.pushName ?? phone,
         telefone: phone,
         ultima_interacao: new Date().toISOString(),
+        is_temporary: !data.pushName,
       })
       .select("id")
       .single();

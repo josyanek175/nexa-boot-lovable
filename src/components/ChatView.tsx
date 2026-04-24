@@ -12,7 +12,9 @@ import {
   UserCog,
   CheckCircle2,
   RotateCcw,
+  UserPlus2,
 } from "lucide-react";
+import { AddContactDialog } from "@/components/AddContactDialog";
 import { sendChatMessage } from "@/lib/chat.functions";
 import {
   assumirConversa,
@@ -45,6 +47,7 @@ interface ConversationData {
     id: string;
     nome: string;
     telefone: string;
+    is_temporary?: boolean;
   } | null;
 }
 
@@ -99,6 +102,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const [sending, setSending] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
   const [attendants, setAttendants] = useState<Array<{ user_id: string; nome: string; email: string }>>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, isAdmin } = useAuth();
@@ -118,6 +122,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const assigneeName = conversation.assigned_profile?.nome;
   const canReassign = isAdmin || hasPermission("pode_reatribuir_conversas" as never);
   const isFinalized = status === "finalizado";
+  const isTemporaryContact = !!conversation.contacts?.is_temporary;
 
   const handleSend = async () => {
     if (!input.trim() || sending || !user || !numberData) return;
@@ -250,7 +255,35 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
         </div>
       </div>
 
-      {/* Transfer modal */}
+      {/* Banner para contatos temporários */}
+      {isTemporaryContact && conversation.contacts && (
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2">
+          <p className="text-xs text-foreground">
+            <span className="font-medium">Este número não está na sua lista de contatos.</span>{" "}
+            <span className="text-muted-foreground">Adicione-o para organizar seu atendimento.</span>
+          </p>
+          <button
+            onClick={() => setShowAddContact(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <UserPlus2 className="h-3.5 w-3.5" />
+            Adicionar aos contatos
+          </button>
+        </div>
+      )}
+
+      {/* Modal adicionar contato */}
+      {conversation.contacts && (
+        <AddContactDialog
+          open={showAddContact}
+          onClose={() => setShowAddContact(false)}
+          contactId={conversation.contacts.id}
+          initialPhone={conversation.contacts.telefone}
+          initialName={isTemporaryContact ? "" : conversation.contacts.nome}
+          onSaved={onConversationUpdate}
+        />
+      )}
+
       {showTransfer && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"

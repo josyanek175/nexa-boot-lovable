@@ -19,7 +19,9 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          is_temporary: boolean
           nome: string
+          observacoes: string | null
           referencia: string | null
           telefone: string
           total_tentativas_sem_resposta: number
@@ -32,7 +34,9 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_temporary?: boolean
           nome: string
+          observacoes?: string | null
           referencia?: string | null
           telefone: string
           total_tentativas_sem_resposta?: number
@@ -45,7 +49,9 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_temporary?: boolean
           nome?: string
+          observacoes?: string | null
           referencia?: string | null
           telefone?: string
           total_tentativas_sem_resposta?: number
