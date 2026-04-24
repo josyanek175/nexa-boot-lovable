@@ -62,14 +62,19 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
   const [tab, setTab] = useState<string>("all");
   const [newOpen, setNewOpen] = useState(false);
 
+  // Deduplicação defensiva: garante 1 conversa por id, mesmo se vier duplicada do estado/cache
+  const uniqueConversations = Array.from(
+    new Map(conversations.map((c) => [c.id, c])).values()
+  );
+
   const counts = {
-    all: conversations.length,
-    pendente: conversations.filter((c) => c.status_atendimento === "pendente").length,
-    em_atendimento: conversations.filter((c) => c.status_atendimento === "em_atendimento").length,
-    finalizado: conversations.filter((c) => c.status_atendimento === "finalizado").length,
+    all: uniqueConversations.length,
+    pendente: uniqueConversations.filter((c) => c.status_atendimento === "pendente").length,
+    em_atendimento: uniqueConversations.filter((c) => c.status_atendimento === "em_atendimento").length,
+    finalizado: uniqueConversations.filter((c) => c.status_atendimento === "finalizado").length,
   };
 
-  const filtered = conversations.filter((c) => {
+  const filtered = uniqueConversations.filter((c) => {
     const name = c.contacts?.nome ?? "";
     const phone = c.contacts?.telefone ?? "";
     const matchSearch =

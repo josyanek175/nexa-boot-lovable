@@ -97,7 +97,11 @@ function ConversationsPage() {
           };
         })
       );
-      setConversations(enriched);
+      // Deduplicação defensiva por id antes de salvar no estado
+      const uniqueEnriched = Array.from(
+        new Map(enriched.map((c: any) => [c.id, c])).values()
+      );
+      setConversations(uniqueEnriched);
     } else {
       setConversations([]);
     }
@@ -145,6 +149,14 @@ function ConversationsPage() {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  // Limpa caches locais ao trocar de número (evita exibir conversas antigas)
+  useEffect(() => {
+    setConversations([]);
+    setMessages([]);
+    setSelectedId(null);
+    messagesRef.current = [];
+  }, [activeNumberId]);
 
   useEffect(() => {
     messagesRef.current = messages;
