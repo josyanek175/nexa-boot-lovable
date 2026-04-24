@@ -13,6 +13,7 @@ import {
   statusColors,
   parseCSVContacts,
 } from "@/lib/crm-utils";
+import { normalizePhone } from "@/lib/phone-utils";
 
 export const Route = createFileRoute("/contacts")({
   component: ContactsPage,
