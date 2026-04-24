@@ -32,23 +32,34 @@ interface EvolutionKey {
 
 interface EvolutionMessageContent {
   conversation?: string;
+  text?: string;
   extendedTextMessage?: { text?: string };
   imageMessage?: { caption?: string };
   videoMessage?: { caption?: string };
   audioMessage?: unknown;
   documentMessage?: { fileName?: string; caption?: string };
+  textMessage?: { text?: string };
 }
 
 interface EvolutionMessageData {
   key?: EvolutionKey;
   message?: EvolutionMessageContent;
+  text?: string;
+  textMessage?: { text?: string };
   pushName?: string;
   messageTimestamp?: number;
 }
 
-function extractText(message?: EvolutionMessageContent): string {
+function extractText(data?: EvolutionMessageData): string {
+  if (!data) return "";
+  // Evolution v2 — texto direto no data
+  if (typeof data.text === "string" && data.text) return data.text;
+  if (data.textMessage?.text) return data.textMessage.text;
+  const message = data.message;
   if (!message) return "";
   if (message.conversation) return message.conversation;
+  if (message.text) return message.text;
+  if (message.textMessage?.text) return message.textMessage.text;
   if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
   if (message.imageMessage?.caption) return message.imageMessage.caption;
   if (message.videoMessage?.caption) return message.videoMessage.caption;
@@ -64,7 +75,7 @@ async function processMessageUpsert(
   data: EvolutionMessageData
 ): Promise<{ persisted: boolean; reason?: string }> {
   const remoteJid = data.key?.remoteJid;
-  const text = extractText(data.message);
+  const text = extractText(data);
 
   if (!remoteJid) return { persisted: false, reason: "missing remoteJid" };
   if (!text) return { persisted: false, reason: "no text content" };
@@ -225,6 +236,9 @@ export const Route = createFileRoute("/api/public/webhook")({
           return fail(400, "Invalid JSON");
         }
 
+        // Debug completo do payload recebido (Evolution v2)
+        console.log("[webhook] payload recebido:", JSON.stringify(payload, null, 2));
+
         const event = (payload.event as string) ?? "unknown";
         const instance =
           (payload.instance as string) ??
@@ -237,7 +251,13 @@ export const Route = createFileRoute("/api/public/webhook")({
         );
 
         try {
-          if ((event === "messages.upsert" || event === "MESSAGES_UPSERT") && data && instance) {
+          const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
+          if (
+            (normalizedEvent === "messages.upsert" ||
+              normalizedEvent === "send.message") &&
+            data &&
+            instance
+          ) {
             const result = await processMessageUpsert(instance, data);
             console.log(`[webhook] processed in ${Date.now() - startedAt}ms`, result);
             return ok({ event, instance, ...result });
