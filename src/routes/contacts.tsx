@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, Mail, Search, Upload, X, RefreshCw, Pencil, Check, Plus } from "lucide-react";
+import { Phone, Mail, Search, Upload, X, RefreshCw, Pencil, Check, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
