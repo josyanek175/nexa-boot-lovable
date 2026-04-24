@@ -77,9 +77,33 @@ async function processMessageUpsert(
   const remoteJid = data.key?.remoteJid;
   const text = extractText(data);
 
+  const externalId = data.key?.id;
+  const isFromMe = data.key?.fromMe === true;
+
   if (!remoteJid) return { persisted: false, reason: "missing remoteJid" };
   if (!text) return { persisted: false, reason: "no text content" };
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
+
+  // Dedup: se já existe mensagem com esse external_id, ignora
+  if (externalId) {
+    const { data: existing } = await supabaseAdmin
+      .from("messages")
+      .select("id")
+      .eq("external_id", externalId)
+      .maybeSingle();
+    if (existing) {
+      console.log(`[webhook] mensagem duplicada ignorada: external_id=${externalId}`);
+      return { persisted: false, reason: "duplicate external_id" };
+    }
+  }
+
+  // Ignora mensagens fromMe (já gravadas localmente pelo optimistic UI no envio).
+  // Se não houver external_id não temos como confirmar duplicidade — mesmo assim ignoramos
+  // para evitar eco do próprio envio.
+  if (isFromMe) {
+    console.log(`[webhook] fromMe ignorado (já salvo localmente): external_id=${externalId ?? "n/a"}`);
+    return { persisted: false, reason: "fromMe ignored" };
+  }
 
   // 1. Resolver instância
   const { data: wpp, error: wppErr } = await supabaseAdmin
@@ -177,10 +201,16 @@ async function processMessageUpsert(
     conversation_id: conv.id,
     whatsapp_number_id: wppId,
     conteudo: text,
-    tipo: data.key?.fromMe ? "saida" : "entrada",
+    tipo: isFromMe ? "saida" : "entrada",
+    external_id: externalId ?? null,
   });
 
   if (msgErr) {
+    // 23505 = unique violation → tratada como duplicata silenciosa
+    if ((msgErr as { code?: string }).code === "23505") {
+      console.log(`[webhook] unique violation ignorada: external_id=${externalId}`);
+      return { persisted: false, reason: "duplicate (unique constraint)" };
+    }
     console.error("[webhook] message insert error:", msgErr);
     return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
   }
