@@ -164,7 +164,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     try {
-      const phoneDigits = data.contactPhone.replace(/\D/g, "");
+      const phoneDigits = normalizePhone(data.contactPhone);
       // Evolution aceita só o número (sem @s.whatsapp.net)
       await sendTextMessage(data.instanceName, phoneDigits, data.conteudo);
       return { message: msg, error: null };
