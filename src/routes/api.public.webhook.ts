@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { normalizePhone } from "@/lib/phone-utils";
+
+// Normalização de telefone inline (sem dependências externas para estabilidade)
+function normalizePhone(input: string): string {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
