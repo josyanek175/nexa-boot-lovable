@@ -58,7 +58,6 @@ interface ConversationData {
 interface ChatViewProps {
   conversation: ConversationData;
   messages: MessageItem[];
-  onMessageSent: () => void;
   onConversationUpdate: () => void;
 }
 
@@ -110,81 +109,20 @@ function MessageBubble({ message }: { message: MessageItem }) {
   );
 }
 
-export function ChatView({ conversation, messages, onMessageSent, onConversationUpdate }: ChatViewProps) {
+export function ChatView({ conversation, messages, onConversationUpdate }: ChatViewProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
   const [attendants, setAttendants] = useState<Array<{ user_id: string; nome: string; email: string }>>([]);
-  const [optimistic, setOptimistic] = useState<MessageItem[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
-  // Limpa otimistas quando a conversa muda ou quando mensagens reais chegam
-  useEffect(() => {
-    setOptimistic((prev) =>
-      prev.filter(
-        (o) =>
-          !messages.some(
-            (m) =>
-              m.tipo === o.tipo &&
-              m.user_id === o.user_id &&
-              m.conteudo === o.conteudo &&
-              Math.abs(new Date(m.data_envio).getTime() - new Date(o.data_envio).getTime()) < 30_000
-          )
-      )
-    );
-  }, [messages]);
-
-  useEffect(() => {
-    setOptimistic([]);
-  }, [conversation.id]);
-
-  const allMessages = (() => {
-    const messageMap = new Map<string, MessageItem>();
-    const externalIdMap = new Map<string, string>();
-
-    for (const msg of messages) {
-      if (msg.external_id) {
-        const existingId = externalIdMap.get(msg.external_id);
-        if (existingId && messageMap.has(existingId)) {
-          messageMap.set(existingId, { ...messageMap.get(existingId), ...msg, id: existingId });
-          continue;
-        }
-
-        externalIdMap.set(msg.external_id, msg.id);
-      }
-
-      messageMap.set(msg.id, msg);
-    }
-
-    for (const optimisticMsg of optimistic) {
-      const matchedRealMessage = messages.find(
-        (msg) =>
-          msg.tipo === optimisticMsg.tipo &&
-          msg.user_id === optimisticMsg.user_id &&
-          msg.conteudo === optimisticMsg.conteudo &&
-          Math.abs(
-            new Date(msg.data_envio).getTime() - new Date(optimisticMsg.data_envio).getTime()
-          ) < 30_000
-      );
-
-      if (matchedRealMessage) {
-        messageMap.set(matchedRealMessage.id, matchedRealMessage);
-        continue;
-      }
-
-      if (!messageMap.has(optimisticMsg.id)) {
-        messageMap.set(optimisticMsg.id, optimisticMsg);
-      }
-    }
-
-    return Array.from(messageMap.values()).sort(
-      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-    );
-  })();
+  const allMessages = Array.from(new Map(messages.map((msg) => [msg.id, msg])).values()).sort(
+    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -218,19 +156,6 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
     }
 
     const text = input.trim();
-    const tempId = `tmp-${Date.now()}`;
-    const optimisticMsg: MessageItem = {
-      id: tempId,
-      conteudo: text,
-      tipo: "saida",
-      data_envio: new Date().toISOString(),
-      user_id: user.id,
-      whatsapp_number_id: conversation.whatsapp_number_id,
-      profiles: null,
-      _status: "sending",
-    };
-    setOptimistic((prev) => [...prev, optimisticMsg]);
-    setInput("");
     setSending(true);
 
     try {
@@ -244,29 +169,16 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
           instanceName: numberData.instance_name,
         },
       });
+      if (res?.message) {
+        setInput("");
+      }
       if (res?.error) {
         toast.error(res.error);
-        setOptimistic((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
-        );
-      } else {
-        const savedMessage = res?.message as MessageItem | null | undefined;
-        setOptimistic((prev) => {
-          if (!savedMessage) {
-            return prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m));
-          }
-
-          return prev.filter((m) => m.id !== tempId && m.id !== savedMessage.id);
-        });
       }
-      onMessageSent();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Falha ao enviar mensagem.";
       console.error("Failed to send:", err);
       toast.error(msg);
-      setOptimistic((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
-      );
     } finally {
       setSending(false);
     }
