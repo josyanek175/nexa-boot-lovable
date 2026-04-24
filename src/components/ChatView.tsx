@@ -257,7 +257,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
 
       {/* Banner para contatos temporários */}
       {isTemporaryContact && conversation.contacts && (
-        <div className="flex items-center justify-between gap-3 border-b border-border bg-amber-500/10 px-4 py-2">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2">
           <p className="text-xs text-foreground">
             <span className="font-medium">Este número não está na sua lista de contatos.</span>{" "}
             <span className="text-muted-foreground">Adicione-o para organizar seu atendimento.</span>
