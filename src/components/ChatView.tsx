@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Send,
   Paperclip,
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   RotateCcw,
   UserPlus2,
+  AlertCircle,
 } from "lucide-react";
 import { AddContactDialog } from "@/components/AddContactDialog";
 import { sendChatMessage } from "@/lib/chat.functions";
@@ -34,6 +36,7 @@ interface MessageItem {
   user_id: string | null;
   whatsapp_number_id: string;
   profiles?: { nome: string } | null;
+  _status?: "sending" | "sent" | "failed";
 }
 
 interface ConversationData {
@@ -73,6 +76,7 @@ function MessageBubble({ message }: { message: MessageItem }) {
     minute: "2-digit",
   });
   const agentName = message.profiles?.nome;
+  const status = message._status;
 
   return (
     <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1.5`}>
@@ -81,7 +85,7 @@ function MessageBubble({ message }: { message: MessageItem }) {
           isSent
             ? "rounded-tr-sm bg-chat-bubble-sent text-foreground"
             : "rounded-tl-sm bg-chat-bubble-received text-foreground"
-        }`}
+        } ${status === "sending" ? "opacity-70" : ""} ${status === "failed" ? "border border-destructive/50" : ""}`}
       >
         {isSent && agentName && (
           <p className="mb-0.5 text-[11px] font-semibold text-primary">{agentName}</p>
@@ -89,7 +93,15 @@ function MessageBubble({ message }: { message: MessageItem }) {
         <p className="whitespace-pre-wrap break-words pr-12">{message.conteudo}</p>
         <div className="float-right -mb-1 ml-2 mt-1 flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground">{time}</span>
-          {isSent && <CheckCheck className="h-3 w-3 text-primary" />}
+          {isSent && status === "sending" && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+          {isSent && status === "failed" && (
+            <AlertCircle className="h-3 w-3 text-destructive" />
+          )}
+          {isSent && (!status || status === "sent") && (
+            <CheckCheck className="h-3 w-3 text-primary" />
+          )}
         </div>
         <div className="clear-both" />
       </div>
@@ -104,13 +116,29 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const [showTransfer, setShowTransfer] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
   const [attendants, setAttendants] = useState<Array<{ user_id: string; nome: string; email: string }>>([]);
+  const [optimistic, setOptimistic] = useState<MessageItem[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, isAdmin } = useAuth();
   const { numbers } = useActiveNumber();
 
+  // Limpa otimistas quando a conversa muda ou quando mensagens reais chegam
+  useEffect(() => {
+    setOptimistic((prev) =>
+      prev.filter((o) => !messages.some((m) => m.conteudo === o.conteudo && m.tipo === "saida"))
+    );
+  }, [messages]);
+
+  useEffect(() => {
+    setOptimistic([]);
+  }, [conversation.id]);
+
+  const allMessages = [...messages, ...optimistic].sort(
+    (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+  );
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [allMessages.length]);
 
   const numberData = numbers.find((n) => n.id === conversation.whatsapp_number_id);
   const contactName = conversation.contacts?.nome ?? "Desconhecido";
@@ -125,23 +153,65 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const isTemporaryContact = !!conversation.contacts?.is_temporary;
 
   const handleSend = async () => {
-    if (!input.trim() || sending || !user || !numberData) return;
+    if (!input.trim() || sending || !user) return;
+    if (!conversation.whatsapp_number_id) {
+      toast.error("Conversa sem número WhatsApp vinculado.");
+      return;
+    }
+    if (!numberData) {
+      toast.error("Número WhatsApp não encontrado. Sincronize em 'Números'.");
+      return;
+    }
+    if (!numberData.instance_name) {
+      toast.error("Instância da Evolution API não configurada para este número.");
+      return;
+    }
+
+    const text = input.trim();
+    const tempId = `tmp-${Date.now()}`;
+    const optimisticMsg: MessageItem = {
+      id: tempId,
+      conteudo: text,
+      tipo: "saida",
+      data_envio: new Date().toISOString(),
+      user_id: user.id,
+      whatsapp_number_id: conversation.whatsapp_number_id,
+      profiles: null,
+      _status: "sending",
+    };
+    setOptimistic((prev) => [...prev, optimisticMsg]);
+    setInput("");
     setSending(true);
+
     try {
-      await sendChatMessage({
+      const res = await sendChatMessage({
         data: {
           conversationId: conversation.id,
           whatsappNumberId: conversation.whatsapp_number_id,
           userId: user.id,
-          conteudo: input.trim(),
+          conteudo: text,
           contactPhone,
           instanceName: numberData.instance_name,
         },
       });
-      setInput("");
+      if (res?.error) {
+        toast.error(res.error);
+        setOptimistic((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
+        );
+      } else {
+        setOptimistic((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, _status: "sent" } : m))
+        );
+      }
       onMessageSent();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Falha ao enviar mensagem.";
       console.error("Failed to send:", err);
+      toast.error(msg);
+      setOptimistic((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, _status: "failed" } : m))
+      );
     } finally {
       setSending(false);
     }
@@ -335,7 +405,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-pattern custom-scrollbar px-4 py-4">
-        {messages.length === 0 ? (
+        {allMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="rounded-lg bg-card/80 px-4 py-2 text-xs text-muted-foreground shadow-sm">
               Nenhuma mensagem ainda. Envie a primeira!
@@ -344,7 +414,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
         ) : (
           (() => {
             let lastDate = "";
-            return messages.map((msg) => {
+            return allMessages.map((msg) => {
               const d = new Date(msg.data_envio);
               const dateLabel = d.toLocaleDateString("pt-BR", {
                 day: "2-digit",
