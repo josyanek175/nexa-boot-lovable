@@ -1,7 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendTextMessage } from "./evolution-api.server";
-import { normalizePhone } from "./phone-utils";
+
+// Normaliza número BR: remove caracteres não numéricos e o 9º dígito extra
+// quando o número está no formato 55 + DDD + 9 + 8 dígitos (13 chars).
+function normalizePhone(input: string): string {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}
 
 // ── Load WhatsApp numbers from DB ──
 export const loadWhatsappNumbers = createServerFn({ method: "GET" }).handler(async () => {

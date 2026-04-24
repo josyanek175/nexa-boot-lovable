@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { normalizePhone } from "@/lib/phone-utils";
+
+// Normalização de telefone inline (sem dependências externas para estabilidade)
+function normalizePhone(input: string): string {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55") && digits[4] === "9") {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -85,18 +93,8 @@ async function processMessageUpsert(
   if (!text) return { persisted: false, reason: "no text content" };
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
 
-  // Dedup: se já existe mensagem com esse external_id, ignora
-  if (externalId) {
-    const { data: existing } = await supabaseAdmin
-      .from("messages")
-      .select("id")
-      .eq("external_id", externalId)
-      .maybeSingle();
-    if (existing) {
-      console.log(`[webhook] mensagem duplicada ignorada: external_id=${externalId}`);
-      return { persisted: false, reason: "duplicate external_id" };
-    }
-  }
+  // Dedup global por external_id (movemos a verificação por instância
+  // logo depois de resolver wppId para ser ainda mais precisa).
 
   // Ignora mensagens fromMe para evitar eco do próprio envio no chat.
   // A mensagem enviada pelo usuário já entra no banco pelo fluxo de envio manual.
@@ -139,7 +137,20 @@ async function processMessageUpsert(
     );
   }
 
-  // 2. Resolver contato (telefone limpo)
+  // Dedup PER-INSTANCE: se já existe mensagem com esse external_id PARA esta instância, ignora.
+  if (externalId) {
+    const { data: existing } = await supabaseAdmin
+      .from("messages")
+      .select("id")
+      .eq("external_id", externalId)
+      .eq("whatsapp_number_id", wppId)
+      .maybeSingle();
+    if (existing) {
+      console.log(`[webhook] duplicada ignorada: external_id=${externalId} instance=${instanceName}`);
+      return { persisted: false, reason: "duplicate external_id for instance" };
+    }
+  }
+
   const phone = normalizePhone(remoteJid.replace(/@.*/, ""));
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
@@ -280,12 +291,7 @@ export const Route = createFileRoute("/api/public/webhook")({
           `[webhook] event=${event} instance=${instance} hasData=${!!data}`
         );
 
-        // Filtro de instância: processa APENAS a instância configurada
-        const ALLOWED_INSTANCE = "tistecnociateste";
-        if (instance && instance !== ALLOWED_INSTANCE) {
-          console.log(`[webhook] instância ignorada: "${instance}" (esperado: "${ALLOWED_INSTANCE}")`);
-          return ok({ event, instance, ignored: true, reason: "instance not allowed" });
-        }
+        // Multi-instância: aceita qualquer instância vinda no payload.
 
         try {
           const normalizedEvent = event.toLowerCase().replace(/_/g, ".");
