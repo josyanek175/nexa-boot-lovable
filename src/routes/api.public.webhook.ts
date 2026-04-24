@@ -201,10 +201,16 @@ async function processMessageUpsert(
     conversation_id: conv.id,
     whatsapp_number_id: wppId,
     conteudo: text,
-    tipo: data.key?.fromMe ? "saida" : "entrada",
+    tipo: isFromMe ? "saida" : "entrada",
+    external_id: externalId ?? null,
   });
 
   if (msgErr) {
+    // 23505 = unique violation → tratada como duplicata silenciosa
+    if ((msgErr as { code?: string }).code === "23505") {
+      console.log(`[webhook] unique violation ignorada: external_id=${externalId}`);
+      return { persisted: false, reason: "duplicate (unique constraint)" };
+    }
     console.error("[webhook] message insert error:", msgErr);
     return { persisted: false, reason: `message insert failed: ${msgErr.message}` };
   }
