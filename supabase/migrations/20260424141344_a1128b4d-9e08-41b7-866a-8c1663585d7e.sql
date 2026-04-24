@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS contacts_telefone_unique ON public.contacts (telefone);
