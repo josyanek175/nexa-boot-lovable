@@ -140,7 +140,7 @@ async function processMessageUpsert(
   }
 
   // 2. Resolver contato (telefone limpo)
-  const phone = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
+  const phone = normalizePhone(remoteJid.replace(/@.*/, ""));
   if (!phone) return { persisted: false, reason: "invalid phone" };
 
   let { data: contact } = await supabaseAdmin
