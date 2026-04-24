@@ -45,6 +45,7 @@ interface ConversationData {
     id: string;
     nome: string;
     telefone: string;
+    is_temporary?: boolean;
   } | null;
 }
 
