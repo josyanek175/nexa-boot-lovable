@@ -89,8 +89,14 @@ async function processMessageUpsert(
   const externalId = data.key?.id;
   const isFromMe = data.key?.fromMe === true;
 
-  if (!remoteJid) return { persisted: false, reason: "missing remoteJid" };
-  if (!text) return { persisted: false, reason: "no text content" };
+  if (!remoteJid) {
+    console.log("[webhook] sem remoteJid → tratado como evento de sistema");
+    return { persisted: false, reason: "missing remoteJid" };
+  }
+  if (!text) {
+    console.log("[webhook] sem texto/message → tratado como evento de sistema");
+    return { persisted: false, reason: "no text content" };
+  }
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
 
   // Dedup global por external_id (movemos a verificação por instância
