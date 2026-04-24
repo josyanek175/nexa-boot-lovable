@@ -93,18 +93,8 @@ async function processMessageUpsert(
   if (!text) return { persisted: false, reason: "no text content" };
   if (remoteJid.endsWith("@g.us")) return { persisted: false, reason: "group message ignored" };
 
-  // Dedup: se já existe mensagem com esse external_id, ignora
-  if (externalId) {
-    const { data: existing } = await supabaseAdmin
-      .from("messages")
-      .select("id")
-      .eq("external_id", externalId)
-      .maybeSingle();
-    if (existing) {
-      console.log(`[webhook] mensagem duplicada ignorada: external_id=${externalId}`);
-      return { persisted: false, reason: "duplicate external_id" };
-    }
-  }
+  // Dedup global por external_id (movemos a verificação por instância
+  // logo depois de resolver wppId para ser ainda mais precisa).
 
   // Ignora mensagens fromMe para evitar eco do próprio envio no chat.
   // A mensagem enviada pelo usuário já entra no banco pelo fluxo de envio manual.
