@@ -122,13 +122,12 @@ export function ChatView({ conversation, messages, onConversationUpdate }: ChatV
   const { numbers } = useActiveNumber();
 
   const uniqueMessages = messages
-    .filter(
-      (msg, index, self) =>
-        index ===
-        self.findIndex(
-          (t) => t.message_id === msg.message_id || t.id === msg.id
-        )
-    )
+    .filter((msg, index, self) => {
+      const messageKey = msg.message_id ?? msg.id;
+      return (
+        index === self.findIndex((t) => (t.message_id ?? t.id) === messageKey)
+      );
+    })
     .slice()
     .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
 

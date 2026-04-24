@@ -31,17 +31,15 @@ function ConversationsPage() {
   const selectedIdRef = useRef<string | null>(null);
 
   const dedupeMessages = useCallback((items: any[]) => {
-    const uniqueMessages = new Map<string, any>();
-
-    for (const item of items) {
-      const identity = item.message_id ?? item.external_id ?? item.id;
-      const existing = uniqueMessages.get(identity);
-      uniqueMessages.set(identity, existing ? { ...existing, ...item } : item);
-    }
-
-    return Array.from(uniqueMessages.values()).sort(
-      (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
-    );
+    return items
+      .filter((msg, index, self) => {
+        const messageKey = msg.message_id ?? msg.id;
+        return (
+          index ===
+          self.findIndex((candidate) => (candidate.message_id ?? candidate.id) === messageKey)
+        );
+      })
+      .sort((a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime());
   }, []);
 
   const fetchConversations = useCallback(async () => {
@@ -182,18 +180,26 @@ function ConversationsPage() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
+          console.log("Nova mensagem recebida:", payload);
           const newMsg = payload.new as any;
           const currentSelectedId = selectedIdRef.current;
-          const alreadyExists = messagesRef.current.some(
-            (msg) =>
-              msg.id === newMsg.id ||
-              (!!newMsg.message_id && msg.message_id === newMsg.message_id) ||
-              (!!newMsg.external_id && msg.external_id === newMsg.external_id)
-          );
 
-          if (currentSelectedId && newMsg.conversation_id === currentSelectedId && !alreadyExists) {
-            setMessages((prev) => dedupeMessages([...prev, newMsg]));
+          if (currentSelectedId && newMsg.conversation_id === currentSelectedId) {
+            const newMessageKey = newMsg.message_id ?? newMsg.id;
+
+            setMessages((prev) => {
+              const exists = prev.find(
+                (message) => (message.message_id ?? message.id) === newMessageKey
+              );
+
+              if (exists) return prev;
+
+              return [...prev, newMsg].sort(
+                (a, b) => new Date(a.data_envio).getTime() - new Date(b.data_envio).getTime()
+              );
+            });
           }
+
           fetchConversations();
         }
       )
