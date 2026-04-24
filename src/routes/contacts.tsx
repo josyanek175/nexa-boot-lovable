@@ -104,7 +104,7 @@ function ContactsPage() {
 
   const createContact = async () => {
     const nome = newDraft.nome.trim();
-    const telefone = newDraft.telefone.replace(/\D/g, "");
+    const telefone = normalizePhone(newDraft.telefone);
     if (!nome || telefone.length < 8) {
       toast.error("Nome e telefone válido são obrigatórios.");
       return;
