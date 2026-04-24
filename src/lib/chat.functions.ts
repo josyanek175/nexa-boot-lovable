@@ -154,15 +154,27 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .eq("id", conv.contact_id);
     }
 
-    // 4. Send via Evolution API (best effort)
-    try {
-      const remoteJid = data.contactPhone.replace(/\D/g, "") + "@s.whatsapp.net";
-      await sendTextMessage(data.instanceName, remoteJid, data.conteudo);
-    } catch (err) {
-      console.error("Evolution API send failed (message saved to DB):", err);
+    // 4. Send via Evolution API
+    if (!data.instanceName) {
+      return {
+        message: msg,
+        error: "Instância WhatsApp não configurada para esta conversa.",
+      };
     }
 
-    return { message: msg, error: null };
+    try {
+      const phoneDigits = data.contactPhone.replace(/\D/g, "");
+      // Evolution aceita só o número (sem @s.whatsapp.net)
+      await sendTextMessage(data.instanceName, phoneDigits, data.conteudo);
+      return { message: msg, error: null };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("Evolution API send failed:", errMsg);
+      return {
+        message: msg,
+        error: `Mensagem salva, mas envio para WhatsApp falhou: ${errMsg}`,
+      };
+    }
   });
 
 // ── Create or find conversation for a contact ──

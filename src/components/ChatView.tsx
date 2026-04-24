@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Send,
   Paperclip,
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   RotateCcw,
   UserPlus2,
+  AlertCircle,
 } from "lucide-react";
 import { AddContactDialog } from "@/components/AddContactDialog";
 import { sendChatMessage } from "@/lib/chat.functions";
@@ -34,6 +36,7 @@ interface MessageItem {
   user_id: string | null;
   whatsapp_number_id: string;
   profiles?: { nome: string } | null;
+  _status?: "sending" | "sent" | "failed";
 }
 
 interface ConversationData {
@@ -73,6 +76,7 @@ function MessageBubble({ message }: { message: MessageItem }) {
     minute: "2-digit",
   });
   const agentName = message.profiles?.nome;
+  const status = message._status;
 
   return (
     <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1.5`}>
@@ -81,7 +85,7 @@ function MessageBubble({ message }: { message: MessageItem }) {
           isSent
             ? "rounded-tr-sm bg-chat-bubble-sent text-foreground"
             : "rounded-tl-sm bg-chat-bubble-received text-foreground"
-        }`}
+        } ${status === "sending" ? "opacity-70" : ""} ${status === "failed" ? "border border-destructive/50" : ""}`}
       >
         {isSent && agentName && (
           <p className="mb-0.5 text-[11px] font-semibold text-primary">{agentName}</p>
@@ -89,7 +93,15 @@ function MessageBubble({ message }: { message: MessageItem }) {
         <p className="whitespace-pre-wrap break-words pr-12">{message.conteudo}</p>
         <div className="float-right -mb-1 ml-2 mt-1 flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground">{time}</span>
-          {isSent && <CheckCheck className="h-3 w-3 text-primary" />}
+          {isSent && status === "sending" && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+          {isSent && status === "failed" && (
+            <AlertCircle className="h-3 w-3 text-destructive" />
+          )}
+          {isSent && (!status || status === "sent") && (
+            <CheckCheck className="h-3 w-3 text-primary" />
+          )}
         </div>
         <div className="clear-both" />
       </div>
