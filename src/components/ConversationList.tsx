@@ -63,8 +63,8 @@ export function ConversationList({ conversations, selectedId, onSelect, currentU
   const [newOpen, setNewOpen] = useState(false);
 
   const uniqueConversations = conversations.filter((conv, index, self) => {
-    const contactNumber = conv.contacts?.telefone ?? conv.id;
-    return index === self.findIndex((t) => (t.contacts?.telefone ?? t.id) === contactNumber);
+    const uniqueKey = `${conv.id}-${conv.whatsapp_number_id}`;
+    return index === self.findIndex((t) => `${t.id}-${t.whatsapp_number_id}` === uniqueKey);
   });
 
   const counts = {
