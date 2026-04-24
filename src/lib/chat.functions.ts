@@ -242,7 +242,7 @@ export const processIncomingMessage = createServerFn({ method: "POST" })
     }) => data
   )
   .handler(async ({ data }) => {
-    const phone = data.contactPhone.replace(/\D/g, "").replace(/@.*/, "");
+    const phone = normalizePhone(data.contactPhone.replace(/@.*/, ""));
 
     // Find or create contact
     let { data: contact } = await supabaseAdmin
