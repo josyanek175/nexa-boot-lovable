@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, Mail, Search, Upload, X, RefreshCw, Pencil, Check, Plus } from "lucide-react";
+import { Phone, Mail, Search, Upload, X, RefreshCw, Pencil, Check, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -123,6 +123,19 @@ function ContactsPage() {
     setCreating(false);
     setNewDraft({ nome: "", telefone: "", referencia: "" });
     fetchContacts();
+  };
+
+  const deleteContact = async (contact: ContactRow) => {
+    if (!window.confirm(`Excluir o contato "${contact.nome}"? Essa ação não pode ser desfeita.`)) return;
+    setSaving(true);
+    const { error } = await supabase.from("contacts").delete().eq("id", contact.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao excluir: " + error.message);
+      return;
+    }
+    toast.success("Contato excluído");
+    setContacts((prev) => prev.filter((c) => c.id !== contact.id));
   };
 
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -354,9 +367,20 @@ function ContactsPage() {
                             </Button>
                           </div>
                         ) : (
-                          <Button size="sm" variant="ghost" onClick={() => startEdit(contact)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => startEdit(contact)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteContact(contact)}
+                              disabled={saving}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         )}
                       </td>
                     </tr>
