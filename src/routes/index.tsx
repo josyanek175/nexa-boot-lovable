@@ -97,7 +97,11 @@ function ConversationsPage() {
           };
         })
       );
-      setConversations(enriched);
+      // Deduplicação defensiva por id antes de salvar no estado
+      const uniqueEnriched = Array.from(
+        new Map(enriched.map((c: any) => [c.id, c])).values()
+      );
+      setConversations(uniqueEnriched);
     } else {
       setConversations([]);
     }
