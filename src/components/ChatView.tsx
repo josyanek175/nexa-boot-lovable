@@ -122,6 +122,7 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
   const assigneeName = conversation.assigned_profile?.nome;
   const canReassign = isAdmin || hasPermission("pode_reatribuir_conversas" as never);
   const isFinalized = status === "finalizado";
+  const isTemporaryContact = !!conversation.contacts?.is_temporary;
 
   const handleSend = async () => {
     if (!input.trim() || sending || !user || !numberData) return;
