@@ -255,7 +255,35 @@ export function ChatView({ conversation, messages, onMessageSent, onConversation
         </div>
       </div>
 
-      {/* Transfer modal */}
+      {/* Banner para contatos temporários */}
+      {isTemporaryContact && conversation.contacts && (
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-amber-500/10 px-4 py-2">
+          <p className="text-xs text-foreground">
+            <span className="font-medium">Este número não está na sua lista de contatos.</span>{" "}
+            <span className="text-muted-foreground">Adicione-o para organizar seu atendimento.</span>
+          </p>
+          <button
+            onClick={() => setShowAddContact(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <UserPlus2 className="h-3.5 w-3.5" />
+            Adicionar aos contatos
+          </button>
+        </div>
+      )}
+
+      {/* Modal adicionar contato */}
+      {conversation.contacts && (
+        <AddContactDialog
+          open={showAddContact}
+          onClose={() => setShowAddContact(false)}
+          contactId={conversation.contacts.id}
+          initialPhone={conversation.contacts.telefone}
+          initialName={isTemporaryContact ? "" : conversation.contacts.nome}
+          onSaved={onConversationUpdate}
+        />
+      )}
+
       {showTransfer && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
