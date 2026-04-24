@@ -53,25 +53,21 @@ export interface EvolutionConfig {
 // para qualquer instância/número, sem depender do que o usuário digitou no
 // formulário de Integrações.
 export async function loadEvolutionConfig(): Promise<EvolutionConfig> {
-  const envUrl = process.env.EVOLUTION_API_URL ?? "";
-  const envKey = process.env.EVOLUTION_API_KEY ?? "";
+  // AUTENTICAÇÃO 100% via Secrets. Ignora qualquer chave/URL que venha do banco.
+  const url = (process.env.EVOLUTION_API_URL ?? "").replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY ?? "";
 
-  let url = envUrl;
-  let apiKey = envKey;
+  // webhook_url/secret ainda podem vir do banco (apenas para integrações de UI),
+  // mas NUNCA sobrescrevem URL/Key da Evolution.
   let webhookUrl = "";
   let webhookSecret = "";
-
   try {
     const { data } = await supabaseAdmin
       .from("integration_settings")
-      .select("*")
+      .select("webhook_url, webhook_secret")
       .limit(1)
       .maybeSingle();
-
     if (data) {
-      // Banco só é usado como fallback se o Secret não estiver definido.
-      if (!url && data.evolution_api_url) url = data.evolution_api_url;
-      if (!apiKey && data.evolution_api_key) apiKey = data.evolution_api_key;
       webhookUrl = data.webhook_url ?? "";
       webhookSecret = data.webhook_secret ?? "";
     }
@@ -79,8 +75,6 @@ export async function loadEvolutionConfig(): Promise<EvolutionConfig> {
     console.error("Failed to load integration settings:", err);
   }
 
-  // Remove trailing slash
-  url = url.replace(/\/+$/, "");
   return { url, apiKey, webhookUrl, webhookSecret };
 }
 
