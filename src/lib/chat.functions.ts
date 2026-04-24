@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendTextMessage } from "./evolution-api.server";
+import { normalizePhone } from "./phone-utils";
 
 // ── Load WhatsApp numbers from DB ──
 export const loadWhatsappNumbers = createServerFn({ method: "GET" }).handler(async () => {
